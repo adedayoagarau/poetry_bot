@@ -1,0 +1,9 @@
+requests
+tweepy
+openai
+google-generativeai
+anthropic
+pillow
+python-dotenv
+beautifulsoup4
+lxml

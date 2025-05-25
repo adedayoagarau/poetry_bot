@@ -1,0 +1,128 @@
+name: Daily Poetry Bot - Two Posts
+
+on:
+  schedule:
+    # Morning post at 9:00 AM UTC (4:00 AM EST / 1:00 AM PST)
+    - cron: '0 9 * * *'
+    # Evening post at 9:00 PM UTC (4:00 PM EST / 1:00 PM PST)  
+    - cron: '0 21 * * *'
+  
+  # Allow manual triggering for testing
+  workflow_dispatch:
+    inputs:
+      test_mode:
+        description: 'Run in test mode (no actual posting)'
+        type: boolean
+        default: false
+
+jobs:
+  post-poetry:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        
+    - name: Determine post time
+      id: post-time
+      run: |
+        current_hour=$(date -u +%H)
+        if [ "$current_hour" -eq "9" ]; then
+          echo "post_type=morning" >> $GITHUB_OUTPUT
+          echo "post_number=1" >> $GITHUB_OUTPUT
+        elif [ "$current_hour" -eq "21" ]; then
+          echo "post_type=evening" >> $GITHUB_OUTPUT  
+          echo "post_number=2" >> $GITHUB_OUTPUT
+        else
+          echo "post_type=manual" >> $GITHUB_OUTPUT
+          echo "post_number=1" >> $GITHUB_OUTPUT
+        fi
+        
+    - name: Run Poetry Bot
+      env:
+        # Twitter API credentials
+        TWITTER_API_KEY: ${{ secrets.TWITTER_API_KEY }}
+        TWITTER_API_SECRET: ${{ secrets.TWITTER_API_SECRET }}
+        TWITTER_ACCESS_TOKEN: ${{ secrets.TWITTER_ACCESS_TOKEN }}
+        TWITTER_ACCESS_TOKEN_SECRET: ${{ secrets.TWITTER_ACCESS_TOKEN_SECRET }}
+        
+        # AI API keys (optional - include the ones you want to use)
+        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
+        
+        # Post configuration
+        POST_TYPE: ${{ steps.post-time.outputs.post_type }}
+        POST_NUMBER: ${{ steps.post-time.outputs.post_number }}
+        TEST_MODE: ${{ github.event.inputs.test_mode }}
+        
+      run: |
+        echo "🕐 Running poetry excerpt post (#$POST_NUMBER)"
+        echo "📅 Current time: $(date -u)"
+        echo "🎲 Using random selection (equal opportunity)"
+        
+        if [ "$TEST_MODE" = "true" ]; then
+          echo "🧪 Running in test mode"
+          python test_locally.py
+        else
+          echo "🚀 Running live poetry bot"
+          python poetry_bot.py
+        fi
+        
+    - name: Log execution
+      if: always()
+      run: |
+        echo "✅ Poetry bot execution completed"
+        echo "📊 Post type: ${{ steps.post-time.outputs.post_type }}"
+        echo "🔢 Post number: ${{ steps.post-time.outputs.post_number }}"
+        echo "🎲 Selection: Random (equal opportunity)"
+        echo "📝 Format: Poetry excerpt with link"
+        echo "📅 Execution time: $(date -u)"
+        
+    # Optional: Upload logs as artifacts for debugging
+    - name: Upload logs
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: poetry-bot-logs-${{ github.run_number }}
+        path: |
+          *.log
+          *.txt
+        retention-days: 7
+
+# Workflow configuration notes:
+# 
+# Schedule Times (UTC):
+# - 9:00 AM UTC = 4:00 AM EST / 1:00 AM PST (First daily post)
+# - 9:00 PM UTC = 4:00 PM EST / 1:00 PM PST (Second daily post)
+#
+# To change posting times, modify the cron expressions above:
+# Format: 'minute hour day month dayofweek'
+# Example: '30 14 * * *' = 2:30 PM UTC daily
+#
+# Your bot will automatically:
+# 1. Use random selection (equal opportunity for all poets)
+# 2. Post 1-2 striking lines with attribution and link
+# 3. Avoid repeating authors/sources on the same day  
+# 4. Track daily limits for AI-generated content
+# 5. Give preference to major poetry sources (3x probability)
+# 6. Include links to full poems for engagement
+#
+# GitHub Secrets needed:
+# - TWITTER_API_KEY
+# - TWITTER_API_SECRET  
+# - TWITTER_ACCESS_TOKEN
+# - TWITTER_ACCESS_TOKEN_SECRET
+# - GEMINI_API_KEY (recommended - free tier available)
+# - OPENAI_API_KEY (optional)
+# - CLAUDE_API_KEY (optional) 

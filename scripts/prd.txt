@@ -1,0 +1,215 @@
+# Poetry Bot - Automated Daily Poetry Sharing Platform
+
+## Overview
+The Poetry Bot is an automated social media bot that curates and shares beautiful poetry excerpts twice daily on Twitter/X. It democratizes poetry discovery by giving equal opportunity to all poets while maintaining high-quality content through intelligent curation from reputable literary sources. The bot combines web scraping, AI-powered content generation, and smart scheduling to create an engaging poetry community.
+
+## Core Features
+
+### 1. Automated Poetry Curation
+- **Web Scraping Engine**: Scrapes poems from 40+ literary journals and poetry websites
+- **Equal Opportunity Selection**: Random selection algorithm ensuring all poets get fair representation
+- **Quality Filtering**: Content filters to maintain appropriate and high-quality posts
+- **Source Attribution**: Always includes proper attribution and links to original sources
+
+### 2. Intelligent Content Processing
+- **Excerpt Generation**: Extracts 1-2 most striking lines from longer poems
+- **Character Optimization**: Ensures posts fit Twitter's character limits while maintaining impact
+- **Duplicate Prevention**: Avoids repeating authors or sources within the same day
+- **Theme Awareness**: Seasonal and contextual theme preferences
+
+### 3. Multi-Platform AI Integration
+- **Primary AI Fallback**: Uses Gemini API (free tier) when web scraping fails
+- **Secondary Options**: OpenAI and Claude API support for redundancy
+- **Prompt Engineering**: Specialized prompts for different poetry styles (haiku, inspirational, nature)
+- **Daily AI Limits**: Maximum 1 AI-generated post per day to maintain authenticity
+
+### 4. Automated Scheduling System
+- **Dual Daily Posts**: Morning (9 AM UTC) and evening (9 PM UTC) posting schedule
+- **GitHub Actions Integration**: Fully automated deployment and execution
+- **Manual Testing**: Test mode for safe development and debugging
+- **Error Handling**: Comprehensive logging and failure recovery
+
+### 5. Social Media Optimization
+- **Hashtag Strategy**: Curated poetry and literature hashtags for discovery
+- **Engagement Features**: Links to full poems to drive traffic to original sources
+- **Community Building**: Consistent posting schedule builds follower expectations
+- **Mobile-Friendly**: Optimized for mobile social media consumption
+
+## User Experience
+
+### Primary Users
+- **Poetry Enthusiasts**: People who love discovering new poems and poets
+- **Literature Students**: Academic users seeking diverse poetry exposure
+- **Social Media Users**: Casual users who enjoy beautiful, thoughtful content
+- **Poets and Writers**: Authors who want their work discovered by new audiences
+
+### User Journey
+1. **Discovery**: Users find the bot through poetry hashtags or recommendations
+2. **Engagement**: Users read daily poetry excerpts in their social feeds
+3. **Exploration**: Users click links to read full poems on original sources
+4. **Community**: Users follow for consistent, high-quality poetry content
+5. **Sharing**: Users retweet and share favorite poems with their networks
+
+### Content Experience
+- **Bite-sized Beauty**: Short, impactful excerpts perfect for social media
+- **Source Transparency**: Clear attribution builds trust and supports original publishers
+- **Variety**: Diverse themes, styles, and poets prevent content fatigue
+- **Accessibility**: Simple text format accessible to all users
+
+## Technical Architecture
+
+### Core Components
+- **Python Bot Engine** (`poetry_bot.py`): Main application logic
+- **Configuration System** (`config.py`): Centralized settings and source management
+- **Web Scraping Module**: BeautifulSoup-based content extraction
+- **AI Integration Layer**: Multi-provider API management
+- **Twitter API Client**: Social media posting and authentication
+- **GitHub Actions Workflow**: Automated deployment and scheduling
+
+### Data Models
+- **Literary Sources**: Journal metadata, URLs, and scraping selectors
+- **Poetry Content**: Extracted poems with metadata and attribution
+- **Post History**: Tracking to prevent duplicates and maintain limits
+- **Configuration**: Themes, hashtags, and behavioral settings
+
+### External Integrations
+- **Twitter/X API**: For posting content and managing account
+- **Literary Websites**: 40+ poetry journals and magazines
+- **AI APIs**: Gemini (primary), OpenAI, Claude (fallbacks)
+- **GitHub Actions**: For automated scheduling and deployment
+
+### Infrastructure
+- **GitHub Repository**: Version control and CI/CD
+- **GitHub Secrets**: Secure API key management
+- **Ubuntu Runners**: Serverless execution environment
+- **Python 3.11**: Runtime environment with dependency management
+
+## Development Roadmap
+
+### Phase 1: Core Bot Functionality (MVP)
+- **Basic Web Scraping**: Implement scraping for top 5 poetry sources
+- **Twitter Integration**: Set up posting capability with basic authentication
+- **Content Processing**: Extract and format poetry excerpts
+- **Manual Execution**: Command-line tool for testing and development
+- **Basic Configuration**: Essential settings and source management
+
+### Phase 2: Enhanced Curation System
+- **Expanded Source Network**: Add all 40+ literary journals
+- **Advanced Filtering**: Content quality and appropriateness filters
+- **Duplicate Prevention**: Author and source tracking systems
+- **Theme Integration**: Seasonal and contextual theme preferences
+- **Error Handling**: Robust failure recovery and logging
+
+### Phase 3: AI Integration and Fallbacks
+- **Multi-Provider AI**: Gemini, OpenAI, and Claude API integration
+- **Intelligent Prompting**: Specialized prompts for different poetry styles
+- **Fallback Logic**: Graceful degradation when web scraping fails
+- **Content Validation**: AI-generated content quality assurance
+- **Usage Limits**: Daily AI post restrictions
+
+### Phase 4: Automation and Deployment
+- **GitHub Actions Workflow**: Automated scheduling and deployment
+- **Dual Daily Posts**: Morning and evening posting schedule
+- **Test Mode**: Safe development and debugging capabilities
+- **Monitoring**: Comprehensive logging and error tracking
+- **Secret Management**: Secure API key handling
+
+### Phase 5: Optimization and Analytics
+- **Performance Tuning**: Optimize scraping speed and reliability
+- **Analytics Integration**: Track engagement and reach metrics
+- **A/B Testing**: Experiment with posting times and content formats
+- **Community Features**: Respond to mentions and build engagement
+- **Advanced Curation**: Machine learning for content quality scoring
+
+## Logical Dependency Chain
+
+### Foundation Layer (Must Build First)
+1. **Configuration System**: Central settings management for all components
+2. **Basic Web Scraping**: Core content extraction from poetry sources
+3. **Content Processing**: Text formatting and excerpt generation
+4. **Twitter API Integration**: Basic posting capability
+
+### Core Functionality Layer
+5. **Source Management**: Weighted selection and duplicate prevention
+6. **Content Filtering**: Quality and appropriateness validation
+7. **Error Handling**: Logging and failure recovery systems
+8. **Manual Testing**: Command-line interface for development
+
+### Intelligence Layer
+9. **AI Integration**: Fallback content generation when scraping fails
+10. **Advanced Curation**: Theme awareness and seasonal preferences
+11. **Smart Selection**: Equal opportunity algorithms and variety optimization
+12. **Content Validation**: Quality assurance for all content types
+
+### Automation Layer
+13. **GitHub Actions Setup**: Automated deployment infrastructure
+14. **Scheduling System**: Dual daily post timing and coordination
+15. **Secret Management**: Secure API key handling in CI/CD
+16. **Monitoring**: Comprehensive logging and error tracking
+
+### Optimization Layer
+17. **Performance Tuning**: Speed and reliability improvements
+18. **Analytics**: Engagement tracking and success metrics
+19. **Community Features**: Interactive capabilities and user engagement
+20. **Advanced Features**: Machine learning and predictive curation
+
+## Risks and Mitigations
+
+### Technical Challenges
+- **Website Changes**: Poetry sources may change their HTML structure
+  - *Mitigation*: Robust selectors, regular testing, AI fallback
+- **API Rate Limits**: Twitter and AI APIs have usage restrictions
+  - *Mitigation*: Respect limits, implement backoff, multiple providers
+- **Content Quality**: Scraped content may be inappropriate or low-quality
+  - *Mitigation*: Content filters, manual review capabilities, AI validation
+
+### MVP Scope Management
+- **Feature Creep**: Tendency to add complex features before core functionality
+  - *Mitigation*: Strict phase-based development, MVP-first approach
+- **Over-Engineering**: Building complex systems before proving basic concept
+  - *Mitigation*: Start with manual execution, gradually add automation
+- **Source Complexity**: Trying to support all 40+ sources immediately
+  - *Mitigation*: Begin with 5 reliable sources, expand incrementally
+
+### Resource Constraints
+- **API Costs**: AI and social media APIs can become expensive
+  - *Mitigation*: Free tiers first, usage monitoring, cost controls
+- **Maintenance Overhead**: Keeping up with website changes and API updates
+  - *Mitigation*: Automated testing, modular design, community contributions
+- **Content Rights**: Ensuring proper attribution and fair use
+  - *Mitigation*: Always link to sources, use excerpts only, respect robots.txt
+
+## Success Metrics
+
+### Engagement Metrics
+- **Daily Active Followers**: Users who regularly engage with posts
+- **Click-Through Rate**: Users visiting original poetry sources
+- **Retweet/Share Rate**: Content being shared by followers
+- **Follower Growth**: Steady increase in account followers
+
+### Content Quality Metrics
+- **Source Diversity**: Equal representation across different poets and journals
+- **Content Freshness**: Avoiding repetitive or stale content
+- **Error Rate**: Successful posts vs. failed attempts
+- **AI Usage**: Staying within daily AI-generated content limits
+
+### Technical Performance
+- **Uptime**: Successful execution of scheduled posts
+- **Scraping Success Rate**: Percentage of successful content extraction
+- **Response Time**: Speed of content processing and posting
+- **Error Recovery**: Successful fallback to alternative content sources
+
+## Appendix
+
+### Research Findings
+- Poetry engagement peaks during morning commute and evening wind-down times
+- Short-form content (1-2 lines) performs better on social media than full poems
+- Attribution and source links build trust and drive traffic to original publishers
+- Equal opportunity curation is valued by poetry communities over algorithmic preferences
+
+### Technical Specifications
+- **Python 3.11+**: Modern Python features and performance
+- **GitHub Actions**: Free tier supports 2000 minutes/month (sufficient for daily posts)
+- **Twitter API v2**: Latest features and improved rate limits
+- **BeautifulSoup4**: Robust HTML parsing for diverse website structures
+- **Multiple AI Providers**: Redundancy and cost optimization 
