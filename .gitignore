@@ -49,4 +49,4 @@ logs/
 # Task Master files (if using)
 .taskmasterconfig
 tasks/
-scripts/
+scripts/node_modules/
