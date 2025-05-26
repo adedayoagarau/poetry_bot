@@ -6,7 +6,6 @@ from datetime import datetime, timedelta
 import openai
 import google.generativeai as genai
 import anthropic
-from PIL import Image, ImageDraw, ImageFont
 import textwrap
 from bs4 import BeautifulSoup
 import json
@@ -26,9 +25,6 @@ class PoetryBot:
         
         # Initialize AI APIs
         self.setup_ai_apis()
-        
-        # Initialize Instagram
-        self.setup_instagram()
         
         # Track daily posts to avoid duplicates
         self.daily_posts = {
@@ -55,15 +51,21 @@ class PoetryBot:
             )
             
             # Also keep v1.1 API for media upload if needed
-            auth = tweepy.OAuthHandler(
-                os.getenv('TWITTER_API_KEY'),
-                os.getenv('TWITTER_API_SECRET')
-            )
-            auth.set_access_token(
-                os.getenv('TWITTER_ACCESS_TOKEN'),
-                os.getenv('TWITTER_ACCESS_TOKEN_SECRET')
-            )
-            self.twitter_api = tweepy.API(auth)
+            if BOT_SETTINGS.get('upload_media_v1_1', False):
+                auth = tweepy.OAuthHandler(
+                    os.getenv('TWITTER_API_KEY'),
+                    os.getenv('TWITTER_API_SECRET')
+                )
+                auth.set_access_token(
+                    os.getenv('TWITTER_ACCESS_TOKEN'),
+                    os.getenv('TWITTER_ACCESS_TOKEN_SECRET')
+                )
+                self.twitter_api = tweepy.API(auth)
+                print("✅ Twitter API v1.1 (for media) initialized.")
+            else:
+                self.twitter_api = None
+                print("ℹ️ Twitter API v1.1 (for media) not initialized as per settings.")
+
             print("✅ Twitter API v2 connected successfully")
         except Exception as e:
             print(f"❌ Twitter API connection failed: {e}")
@@ -88,26 +90,6 @@ class PoetryBot:
             print("✅ Claude API connected")
         else:
             self.claude_client = None
-
-    def setup_instagram(self):
-        """Set up Instagram client"""
-        try:
-            from instagrapi import Client
-            username = os.getenv('INSTAGRAM_USERNAME')
-            password = os.getenv('INSTAGRAM_PASSWORD')
-            if username and password:
-                self.instagram = Client()
-                self.instagram.login(username, password)
-                print("✅ Instagram connected successfully")
-            else:
-                print("ℹ️ Instagram credentials not found, Instagram features disabled.")
-                self.instagram = None
-        except ImportError:
-            print("⚠️ instagrapi library not found, Instagram features disabled.")
-            self.instagram = None
-        except Exception as e:
-            print(f"❌ Instagram connection failed: {e}")
-            self.instagram = None
 
     def check_daily_reset(self):
         """Reset daily tracking if it's a new day"""
@@ -759,72 +741,6 @@ class PoetryBot:
         
         return poem
 
-    def create_poem_image(self, poem):
-        """Create a beautiful image with the poem text"""
-        try:
-            # Create image
-            width, height = 800, 600
-            img = Image.new('RGB', (width, height), color=random.choice(IMAGE_COLORS['backgrounds']))
-            draw = ImageDraw.Draw(img)
-            
-            # Try to load a nice font, fallback to default
-            try:
-                font_title = ImageFont.truetype("Arial.ttf", 24)
-                font_text = ImageFont.truetype("Arial.ttf", 18)
-                font_author = ImageFont.truetype("Arial.ttf", 16)
-            except:
-                font_title = ImageFont.load_default()
-                font_text = ImageFont.load_default()
-                font_author = ImageFont.load_default()
-            
-            # Prepare text
-            title = poem['title'][:50]  # Limit title length
-            author = f"— {poem['author']}"
-            
-            # Wrap poem text
-            poem_lines = []
-            for line in poem['text'].split('\n'):
-                wrapped = textwrap.fill(line, width=40)
-                poem_lines.extend(wrapped.split('\n'))
-            
-            # Limit to fit on image
-            poem_lines = poem_lines[:15]
-            
-            # Calculate positions
-            y_position = 50
-            
-            # Draw title
-            title_bbox = draw.textbbox((0, 0), title, font=font_title)
-            title_width = title_bbox[2] - title_bbox[0]
-            draw.text(((width - title_width) // 2, y_position), title, 
-                     fill=random.choice(IMAGE_COLORS['text']), font=font_title)
-            y_position += 60
-            
-            # Draw poem text
-            for line in poem_lines:
-                if line.strip():
-                    line_bbox = draw.textbbox((0, 0), line, font=font_text)
-                    line_width = line_bbox[2] - line_bbox[0]
-                    draw.text(((width - line_width) // 2, y_position), line, 
-                             fill=random.choice(IMAGE_COLORS['text']), font=font_text)
-                y_position += 25
-            
-            # Draw author
-            y_position += 30
-            author_bbox = draw.textbbox((0, 0), author, font=font_author)
-            author_width = author_bbox[2] - author_bbox[0]
-            draw.text(((width - author_width) // 2, y_position), author, 
-                     fill=random.choice(IMAGE_COLORS['text']), font=font_author)
-            
-            # Save image
-            img_path = f"poem_image_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
-            img.save(img_path)
-            return img_path
-            
-        except Exception as e:
-            print(f"Image creation failed: {e}")
-            return None
-
     def format_tweet_text(self, poem):
         """Format poem in exact format: "lines" - Author Name \n\n Read more: URL \n\n #WritingCommunity #PoetryCommunity"""
         # Extract up to 4 striking lines from the poem
@@ -878,8 +794,8 @@ class PoetryBot:
         
         return tweet_text[:280]  # Final safety truncation
 
-    def post_to_twitter(self, poem, image_path=None):
-        """Post poem to Twitter using API v2 with validation"""
+    def post_to_twitter(self, poem):
+        """Post poem to Twitter using API v2 with validation (text only)"""
         if not hasattr(self, 'twitter_client') or not self.twitter_client:
             print("❌ Twitter API v2 not available")
             return False
@@ -900,28 +816,12 @@ class PoetryBot:
             print(tweet_text)
             print("-" * 50)
             
-            # Post with image if available (v2 API)
-            media_ids = None
-            if image_path and os.path.exists(image_path) and self.twitter_api:
-                try:
-                    media = self.twitter_api.media_upload(image_path)
-                    media_ids = [media.media_id]
-                    print("✅ Image uploaded successfully")
-                except Exception as e:
-                    print(f"⚠️  Image upload failed, posting text only: {e}")
-            
-            # Post using Twitter API v2
-            response = self.twitter_client.create_tweet(
-                text=tweet_text,
-                media_ids=media_ids
-            )
+            # Post using Twitter API v2 (text only)
+            response = self.twitter_client.create_tweet(text=tweet_text)
             
             if response.data:
                 tweet_id = response.data['id']
-                if media_ids:
-                    print(f"✅ Posted to Twitter with image: {tweet_id}")
-                else:
-                    print(f"✅ Posted to Twitter: {tweet_id}")
+                print(f"✅ Posted to Twitter (text only): {tweet_id}")
                 return True
             else:
                 print("❌ Tweet creation failed - no response data")
@@ -931,63 +831,9 @@ class PoetryBot:
             print(f"❌ Twitter posting failed: {e}")
             return False
 
-    def create_instagram_image(self, poem):
-        """Create Instagram-ready square image"""
-        width, height = 1080, 1080
-        img = Image.new('RGB', (width, height))
-        draw = ImageDraw.Draw(img)
-        for y in range(height):
-            ratio = y / height
-            r = int(255 * (1 - ratio * 0.1))
-            g = int(182 + (218 - 182) * ratio)
-            b = int(193 + (185 - 193) * ratio)
-            draw.line([(0, y), (width, y)], fill=(r, g, b))
-        try:
-            font_large = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 42)
-            font_small = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 32)
-        except:
-            font_large = ImageFont.load_default()
-            font_small = ImageFont.load_default()
-        y_pos = 200
-        lines = poem['text'].split('\n')[:6]
-        for line in lines:
-            if line.strip():
-                bbox = draw.textbbox((0, 0), line, font=font_large)
-                text_width = bbox[2] - bbox[0]
-                x_pos = (width - text_width) // 2
-                draw.text((x_pos, y_pos), line, fill=(60, 60, 60), font=font_large)
-                y_pos += 60
-        author_text = f"— {poem['author']}"
-        bbox = draw.textbbox((0, 0), author_text, font=font_small)
-        text_width = bbox[2] - bbox[0]
-        x_pos = (width - text_width) // 2
-        draw.text((x_pos, height - 200), author_text, fill=(100, 100, 100), font=font_small)
-        img_path = f"insta_poem_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
-        img.save(img_path, 'JPEG', quality=95)
-        return img_path
-
-    def post_to_instagram(self, poem):
-        """Post poem to Instagram"""
-        if not hasattr(self, 'instagram') or not self.instagram:
-            print("ℹ️ Instagram client not available or not configured. Skipping Instagram post.")
-            return False
-        try:
-            img_path = self.create_instagram_image(poem)
-            caption = f"'{poem['title']}' by {poem['author']}\n\n"
-            caption += "What's your favorite line? 💭\n\n"
-            caption += "#poetry #dailypoem #poetrycommunity #poetrylovers #instapoetry #writersofinstagram #poems #literature #poetrygram #poetryislife"
-            media = self.instagram.photo_upload(img_path, caption)
-            print(f"✅ Posted to Instagram successfully!")
-            if os.path.exists(img_path):
-                os.remove(img_path)
-            return True
-        except Exception as e:
-            print(f"❌ Instagram posting failed: {e}")
-            return False
-
     def run(self):
-        """Main bot execution with random selection and excerpt posting"""
-        print("🤖 Poetry Bot starting...")
+        """Main bot execution - Now Twitter Focused and Text Only"""
+        print("🤖 Poetry Bot (Twitter Focused, Text Only) starting...")
         
         # Check if we need to reset daily tracking
         self.check_daily_reset()
@@ -996,7 +842,7 @@ class PoetryBot:
         post_number = self.get_post_number_today()
         total_posts = BOT_SETTINGS.get('posts_per_day', 2)
         
-        print(f"📊 Starting post {post_number} of {total_posts} for today")
+        print(f"📊 Starting Twitter post {post_number} of {total_posts} for today")
         print(f"🎲 Using random selection from {len(LITERARY_JOURNALS)} curated sources")
         print("🎯 Equal opportunity for all poets!")
         
@@ -1027,59 +873,34 @@ class PoetryBot:
             'post_number': post_number
         })
         
-        # Skip image creation (we're focusing on text excerpts with links)
-        image_path = None
-        if BOT_SETTINGS.get('create_images', False):
-            print("🖼️  Creating poem image...")
-            image_path = self.create_poem_image(poem)
-            if image_path:
-                print(f"✅ Image created: {image_path}")
-            else:
-                print("⚠️  Image creation failed, will post text only")
-        
-        # Post to Twitter with validation
-        print("🐦 Posting excerpt to Twitter...")
-        success = self.post_to_twitter(poem, image_path)
-
-        # Post to Instagram (guarded, so errors here do not affect Twitter)
-        if hasattr(self, 'instagram') and self.instagram:
-            try:
-                print("📱 Posting to Instagram...")
-                self.post_to_instagram(poem)
-            except Exception as e:
-                print(f"⚠️  Instagram posting failed, but Twitter post unaffected: {e}")
-        else:
-            print("ℹ️  Instagram not configured or skipped. Only Twitter posting performed.")
-        
-        # Clean up image file
-        if image_path and os.path.exists(image_path):
-            os.remove(image_path)
-            print("🧹 Cleaned up image file")
+        # Post to Twitter (text only)
+        print("🐦 Posting excerpt to Twitter (text only)...")
+        success = self.post_to_twitter(poem)
             
         # Print daily summary
         self.print_daily_summary()
             
         if success:
-            print(f"🎉 Poetry bot completed successfully! (Post {post_number}/{total_posts})")
+            print(f"🎉 Twitter Poetry bot completed successfully! (Post {post_number}/{total_posts})")
             print(f"✨ Posted excerpt from '{poem['title']}' by {poem['author']} from {poem['source']}")
         else:
-            print("❌ Poetry bot encountered errors during posting")
+            print("❌ Twitter Poetry bot encountered errors during posting")
             
         return success
 
     def print_daily_summary(self):
-        """Print summary of today's posting activity"""
+        """Print summary of today's posting activity (Twitter Focused)"""
         post_count = len(self.daily_posts['poems_posted'])
         target_posts = BOT_SETTINGS.get('posts_per_day', 2)
         
-        print(f"\n📈 Daily Summary ({self.daily_posts['date']}):")
+        print(f"\n📈 Daily Twitter Summary ({self.daily_posts['date']}):")
         print(f"   Posts completed: {post_count}/{target_posts}")
         print(f"   Sources used: {', '.join(set(self.daily_posts['sources']))}")
         authors_list = list(set(self.daily_posts['authors']))
         print(f"   Authors featured: {', '.join(authors_list[:3])}{'...' if len(authors_list) > 3 else ''}")
         print(f"   AI generations: {self.daily_posts['ai_posts_count']}/{BOT_SETTINGS.get('max_ai_posts_per_day', 1)}")
         print(f"   🎲 Selection method: Random (equal opportunity)")
-        print(f"   📝 Format: Poetry excerpts with links")
+        print(f"   📝 Format: Poetry excerpts with links (text only)")
         
         remaining_posts = target_posts - post_count
         if remaining_posts > 0:
