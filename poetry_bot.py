@@ -258,9 +258,11 @@ class PoetryBot:
         if len(tweet_text) > 280:
             return False, "Tweet text too long for Twitter"
         
-        # Ensure tweet contains actual poem content
-        poem_preview = poem_data['text'][:50].lower()
-        if poem_preview not in tweet_text.lower():
+        # Ensure tweet contains actual poem content (check for any poem words)
+        poem_words = poem_data['text'].lower().split()[:10]  # First 10 words
+        tweet_lower = tweet_text.lower()
+        poem_content_found = any(word in tweet_lower for word in poem_words if len(word) > 3)
+        if not poem_content_found:
             return False, "Tweet doesn't contain poem content"
         
         # If URL included, make sure it's valid
@@ -531,7 +533,7 @@ class PoetryBot:
         # Try Gemini first (free tier available)
         if os.getenv('GEMINI_API_KEY') and not poem:
             try:
-                model = genai.GenerativeModel('gemini-pro')
+                model = genai.GenerativeModel('gemini-1.5-flash')
                 response = model.generate_content(prompt)
                 poem_text = response.text.strip()
                 
@@ -566,7 +568,8 @@ class PoetryBot:
         # Try OpenAI as fallback
         if os.getenv('OPENAI_API_KEY') and not poem:
             try:
-                response = openai.ChatCompletion.create(
+                client = openai.OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+                response = client.chat.completions.create(
                     model="gpt-3.5-turbo",
                     messages=[{"role": "user", "content": prompt}],
                     max_tokens=200
@@ -902,7 +905,8 @@ class PoetryBot:
         print(f"\n📈 Daily Summary ({self.daily_posts['date']}):")
         print(f"   Posts completed: {post_count}/{target_posts}")
         print(f"   Sources used: {', '.join(set(self.daily_posts['sources']))}")
-        print(f"   Authors featured: {', '.join(set(self.daily_posts['authors'])[:3])}{'...' if len(set(self.daily_posts['authors'])) > 3 else ''}")
+        authors_list = list(set(self.daily_posts['authors']))
+        print(f"   Authors featured: {', '.join(authors_list[:3])}{'...' if len(authors_list) > 3 else ''}")
         print(f"   AI generations: {self.daily_posts['ai_posts_count']}/{BOT_SETTINGS.get('max_ai_posts_per_day', 1)}")
         print(f"   🎲 Selection method: Random (equal opportunity)")
         print(f"   📝 Format: Poetry excerpts with links")
