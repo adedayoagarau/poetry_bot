@@ -172,6 +172,36 @@ SITE_CONFIGS = {
             r'award',
             r'selected-poems'
         ]
+    },
+    'www.poetrynw.org': { 
+        'name': 'Poetry Northwest',
+        'base_urls': [
+            'https://www.poetrynw.org/' 
+        ],
+        'poem_patterns': [
+            r'/poems/.*/$' # Placeholder - needs review
+        ],
+        'css_selectors': [
+            'a[href*="/poems/"]' # Placeholder - needs review
+        ],
+        'exclude_patterns': [
+            r'/about',
+            r'/submit'
+        ]
+    },
+    'barrenmagazine.com': {
+        'name': 'Barren Magazine',
+        'base_urls': ['https://barrenmagazine.com/'], 
+        'poem_patterns': [r'/[^/]+/[^/]+/?$'], # Placeholder - needs review, very generic
+        'css_selectors': ['article a'], # Placeholder - needs review
+        'exclude_patterns': [r'/about', r'/submissions']
+    },
+    'greensbororeview.org': {
+        'name': 'Greensboro Review',
+        'base_urls': ['https://greensbororeview.org/'], 
+        'poem_patterns': [r'/issue-\d+/.*html$'], # Placeholder - needs review
+        'css_selectors': ['a[href*=".html"]'], # Placeholder - needs review
+        'exclude_patterns': [r'/about', r'/contests']
     }
 }
 
