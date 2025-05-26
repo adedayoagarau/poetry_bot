@@ -12,7 +12,6 @@ from bs4 import BeautifulSoup
 import json
 from dotenv import load_dotenv
 from config import *
-from instagrapi import Client
 from poem_link_discovery import get_poem_links, SITE_CONFIGS
 from urllib.parse import urlparse
 import re
@@ -92,17 +91,22 @@ class PoetryBot:
 
     def setup_instagram(self):
         """Set up Instagram client"""
-        username = os.getenv('INSTAGRAM_USERNAME')
-        password = os.getenv('INSTAGRAM_PASSWORD')
-        if username and password:
-            try:
+        try:
+            from instagrapi import Client
+            username = os.getenv('INSTAGRAM_USERNAME')
+            password = os.getenv('INSTAGRAM_PASSWORD')
+            if username and password:
                 self.instagram = Client()
                 self.instagram.login(username, password)
                 print("✅ Instagram connected successfully")
-            except Exception as e:
-                print(f"❌ Instagram connection failed: {e}")
+            else:
+                print("ℹ️ Instagram credentials not found, Instagram features disabled.")
                 self.instagram = None
-        else:
+        except ImportError:
+            print("⚠️ instagrapi library not found, Instagram features disabled.")
+            self.instagram = None
+        except Exception as e:
+            print(f"❌ Instagram connection failed: {e}")
             self.instagram = None
 
     def check_daily_reset(self):
@@ -965,7 +969,7 @@ class PoetryBot:
     def post_to_instagram(self, poem):
         """Post poem to Instagram"""
         if not hasattr(self, 'instagram') or not self.instagram:
-            print("❌ Instagram not configured")
+            print("ℹ️ Instagram client not available or not configured. Skipping Instagram post.")
             return False
         try:
             img_path = self.create_instagram_image(poem)
@@ -1036,11 +1040,16 @@ class PoetryBot:
         # Post to Twitter with validation
         print("🐦 Posting excerpt to Twitter...")
         success = self.post_to_twitter(poem, image_path)
-        
-        # Post to Instagram
+
+        # Post to Instagram (guarded, so errors here do not affect Twitter)
         if hasattr(self, 'instagram') and self.instagram:
-            print("📱 Posting to Instagram...")
-            self.post_to_instagram(poem)
+            try:
+                print("📱 Posting to Instagram...")
+                self.post_to_instagram(poem)
+            except Exception as e:
+                print(f"⚠️  Instagram posting failed, but Twitter post unaffected: {e}")
+        else:
+            print("ℹ️  Instagram not configured or skipped. Only Twitter posting performed.")
         
         # Clean up image file
         if image_path and os.path.exists(image_path):
