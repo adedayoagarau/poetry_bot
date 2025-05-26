@@ -70,5 +70,24 @@ def test_twitter_access():
         print(f"❌ Twitter API connection failed: {e}")
         return False
 
+# Load credentials from environment variables
+consumer_key = os.getenv('TWITTER_API_KEY')
+consumer_secret = os.getenv('TWITTER_API_SECRET')
+access_token = os.getenv('TWITTER_ACCESS_TOKEN')
+access_token_secret = os.getenv('TWITTER_ACCESS_TOKEN_SECRET')
+
+# Authenticate with Twitter API v1.1 (for posting tweets)
+auth = tweepy.OAuthHandler(consumer_key, consumer_secret)
+auth.set_access_token(access_token, access_token_secret)
+api = tweepy.API(auth)
+
+try:
+    tweet_text = "Test tweet from poetry bot (manual API test). #PoetryBotTest"
+    tweet = api.update_status(tweet_text)
+    print(f"✅ Successfully posted test tweet! Tweet ID: {tweet.id}")
+    print(f"Tweet URL: https://twitter.com/{tweet.user.screen_name}/status/{tweet.id}")
+except Exception as e:
+    print(f"❌ Failed to post tweet: {e}")
+
 if __name__ == "__main__":
     test_twitter_access() 
