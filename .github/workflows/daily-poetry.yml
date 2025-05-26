@@ -82,7 +82,7 @@ jobs:
           echo "post_number=1" >> $GITHUB_OUTPUT
         fi
         
-    - name: Run Poetry Bot
+    - name: Run Twitter Poetry Bot
       env:
         # Twitter API credentials
         TWITTER_API_KEY: ${{ secrets.TWITTER_API_KEY }}
@@ -101,16 +101,17 @@ jobs:
         TEST_MODE: ${{ github.event.inputs.test_mode }}
         
       run: |
-        echo "🕐 Running poetry excerpt post (#$POST_NUMBER)"
+        echo "🕐 Running Twitter poetry excerpt post (#$POST_NUMBER)"
         echo "📅 Current time: $(date -u)"
         echo "🎲 Using random selection (equal opportunity)"
+        echo "🐦 Twitter-only bot (Instagram separated)"
         
         if [ "$TEST_MODE" = "true" ]; then
           echo "🧪 Running in test mode"
           python test_locally.py
         else
-          echo "🚀 Running live poetry bot"
-          python poetry_bot.py
+          echo "🚀 Running live Twitter poetry bot"
+          python twitter_bot.py
         fi
         
     - name: Log execution
