@@ -83,11 +83,14 @@ jobs:
           echo "post_number=1" >> $GITHUB_OUTPUT
         fi
         
-    - name: Display poetry_bot.py contents
+    - name: Display poetry_bot.py and directory contents
       run: |
-        echo "--- Start of poetry_bot.py ---"
+        echo "--- Start of poetry_bot.py (first 20 lines) ---"
         head -n 20 poetry_bot.py
         echo "--- End of poetry_bot.py ---"
+        echo "--- Directory Listing (ls -la) ---"
+        ls -la
+        echo "--- End of Directory Listing ---"
         
     - name: Run Twitter Poetry Bot
       env:
