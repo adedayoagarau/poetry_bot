@@ -86,7 +86,7 @@ jobs:
     - name: Display poetry_bot.py contents
       run: |
         echo "--- Start of poetry_bot.py ---"
-        head -n 20 poetry_bot.py  # Or your poetry_bot.py path if it's not in root
+        head -n 20 poetry_bot.py
         echo "--- End of poetry_bot.py ---"
         
     - name: Run Twitter Poetry Bot
