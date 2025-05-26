@@ -60,21 +60,8 @@ IMAGE_COLORS = {
 
 # Social media hashtags
 HASHTAGS = [
-    '#poetry',
-    '#poems', 
-    '#poetrycommunity',
-    '#poetrylovers',
-    '#dailypoetry',
-    '#literaryart',
-    '#wordart',
-    '#poetrybot',
-    '#inspiration',
-    '#beautiful',
-    '#literature',
-    '#verse',
-    '#creativity',
-    '#mindfulness',
-    '#reflection'
+    '#WritingCommunity',
+    '#PoetryCommunity'
 ]
 
 # Literary journals and sources - Flattened for random selection with slight preference for major sources
@@ -310,8 +297,8 @@ def get_weighted_journal_list():
     weighted_list = []
     for journal in LITERARY_JOURNALS:
         if journal.get('preferred', False):
-            # Preferred sources appear 3 times (3x probability)
-            weighted_list.extend([journal] * 3)
+            # Preferred sources appear 5 times (5x probability) - they work better
+            weighted_list.extend([journal] * 5)
         else:
             # Regular sources appear once
             weighted_list.append(journal)
@@ -319,19 +306,20 @@ def get_weighted_journal_list():
 
 # Bot behavior settings - Simplified and egalitarian
 BOT_SETTINGS = {
-    'posts_per_day': 2,                     # Two posts daily
-    'post_times_utc': ['09:00', '21:00'],   # Morning & evening posts
+    'posts_per_day': 10,                    # 10 posts per day for Twitter
+    'post_times_utc': ['00:00', '02:24', '04:48', '07:12', '09:36', '12:00', '14:24', '16:48', '19:12', '21:36'],  # Every ~2.4 hours
     'max_poem_length': 500,                 # Allow longer poems (we'll extract best lines)
-    'backup_to_ai': True,                   # Use AI if web scraping fails
+    'backup_to_ai': False,                  # NO AI - ONLY REAL POEMS
     'create_images': False,                 # Focus on text-only posts with links
     'include_source': True,                 # Always include source attribution
-    'random_selection': True,               # NEW: Random selection, no tiers
-    'avoid_repeat_authors': True,           # Try not to repeat same author too often
-    'avoid_repeat_sources': True,           # Don't use same source twice in one day
-    'max_ai_posts_per_day': 1,              # Limited AI-generated content
-    'post_format': 'excerpt',               # NEW: Post 1-2 striking lines only
-    'include_poem_links': True,             # NEW: Always include link to full poem
-    'equal_opportunity': True,              # NEW: All poets get equal chance
+    'random_selection': True,               # Random selection, no tiers
+    'avoid_repeat_authors': False,          # Allow repeat authors (we need 10 posts/day)
+    'avoid_repeat_sources': False,          # Allow repeat sources (we need 10 posts/day)
+    'max_ai_posts_per_day': 0,              # NO AI CONTENT ALLOWED
+    'post_format': 'excerpt',               # Post up to 4 lines only
+    'include_poem_links': True,             # Always include link to full poem
+    'equal_opportunity': True,              # All poets get equal chance
+    'require_real_poems_only': True,        # ONLY real poems from journals
 }
 
 # Content filters (poems containing these words will be skipped)

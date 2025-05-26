@@ -38,8 +38,18 @@ class PoetryBot:
         }
         
     def setup_twitter(self):
-        """Set up Twitter API connection"""
+        """Set up Twitter API v2 connection"""
         try:
+            # Use Twitter API v2 client (compatible with free tier)
+            self.twitter_client = tweepy.Client(
+                consumer_key=os.getenv('TWITTER_API_KEY'),
+                consumer_secret=os.getenv('TWITTER_API_SECRET'),
+                access_token=os.getenv('TWITTER_ACCESS_TOKEN'),
+                access_token_secret=os.getenv('TWITTER_ACCESS_TOKEN_SECRET'),
+                wait_on_rate_limit=True
+            )
+            
+            # Also keep v1.1 API for media upload if needed
             auth = tweepy.OAuthHandler(
                 os.getenv('TWITTER_API_KEY'),
                 os.getenv('TWITTER_API_SECRET')
@@ -49,9 +59,10 @@ class PoetryBot:
                 os.getenv('TWITTER_ACCESS_TOKEN_SECRET')
             )
             self.twitter_api = tweepy.API(auth)
-            print("✅ Twitter API connected successfully")
+            print("✅ Twitter API v2 connected successfully")
         except Exception as e:
             print(f"❌ Twitter API connection failed: {e}")
+            self.twitter_client = None
             self.twitter_api = None
             
     def setup_ai_apis(self):
@@ -123,14 +134,14 @@ class PoetryBot:
         return len(self.daily_posts['poems_posted']) + 1
 
     def select_striking_lines(self, poem_text):
-        """Select 1-2 most striking lines from a poem"""
+        """Select up to 4 most striking lines from a poem"""
         lines = [line.strip() for line in poem_text.split('\n') if line.strip()]
         
         if not lines:
             return poem_text[:100] + "..." if len(poem_text) > 100 else poem_text
         
-        # If poem is very short (1-2 lines), use it all
-        if len(lines) <= 2:
+        # If poem is very short (1-4 lines), use it all
+        if len(lines) <= 4:
             return '\n'.join(lines)
         
         # Look for lines with striking imagery, emotion, or memorable phrases
@@ -170,24 +181,23 @@ class PoetryBot:
             
             scored_lines.append((score, i, line))
         
-        # Sort by score and select best lines
+        # Sort by score and select best lines (up to 4)
         scored_lines.sort(reverse=True, key=lambda x: x[0])
         
-        # Take 1-2 best lines, preferring consecutive ones if possible
-        if len(scored_lines) >= 2:
-            first_line = scored_lines[0]
-            second_line = scored_lines[1]
-            
-            # If the two best lines are consecutive, use both
-            if abs(first_line[1] - second_line[1]) == 1:
-                lines_to_use = sorted([first_line, second_line], key=lambda x: x[1])
-                return '\n'.join([line[2] for line in lines_to_use])
-            else:
-                # Otherwise, just use the single best line
-                return first_line[2]
-        else:
-            # Use the best line
-            return scored_lines[0][2] if scored_lines else lines[0]
+        # Take up to 4 best lines, preferring consecutive ones when possible
+        selected_lines = []
+        used_indices = set()
+        
+        for score, index, line in scored_lines:
+            if len(selected_lines) >= 4:
+                break
+            if index not in used_indices:
+                selected_lines.append((index, line))
+                used_indices.add(index)
+        
+        # Sort selected lines by their original order in the poem
+        selected_lines.sort(key=lambda x: x[0])
+        return '\n'.join([line[1] for line in selected_lines])
 
     def validate_poem_content(self, poem_data, url=None):
         """Validate that poem content is real and complete"""
@@ -219,7 +229,7 @@ class PoetryBot:
             if pattern in text_lower:
                 return False, f"Content contains error pattern: {pattern}"
         
-        # Check that it looks like actual poetry (not just navigation text)
+        # Check that it looks like actual poetry (not just navigation text or prose)
         lines = [line.strip() for line in text.split('\n') if line.strip()]
         if len(lines) < 2:
             return False, "Insufficient poem content (needs multiple lines)"
@@ -227,6 +237,28 @@ class PoetryBot:
         # Avoid poems that are just titles/headers
         if all(len(line) < 10 for line in lines):
             return False, "Lines too short (likely navigation text)"
+        
+        # Check for prose vs poetry indicators
+        # Poetry typically has shorter lines, more line breaks, less dense text
+        avg_line_length = sum(len(line) for line in lines) / len(lines) if lines else 0
+        long_lines = sum(1 for line in lines if len(line) > 100)
+        
+        # If most lines are very long, it's likely prose, not poetry
+        if avg_line_length > 80 and long_lines > len(lines) * 0.7:
+            return False, "Content appears to be prose, not poetry"
+        
+        # Check for essay/article indicators
+        prose_indicators = [
+            'paragraph', 'essay', 'article', 'chapter', 'section',
+            'in this piece', 'the author', 'the writer', 'the poet writes',
+            'according to', 'as mentioned', 'furthermore', 'however',
+            'in conclusion', 'to summarize', 'for example', 'such as'
+        ]
+        
+        text_lower = text.lower()
+        prose_count = sum(1 for indicator in prose_indicators if indicator in text_lower)
+        if prose_count >= 3:
+            return False, "Content appears to be prose/essay about poetry, not actual poetry"
         
         # Check for reasonable title and author
         title = poem_data['title'].strip()
@@ -258,12 +290,18 @@ class PoetryBot:
         if len(tweet_text) > 280:
             return False, "Tweet text too long for Twitter"
         
-        # Ensure tweet contains actual poem content (check for any poem words)
-        poem_words = poem_data['text'].lower().split()[:10]  # First 10 words
+        # Ensure tweet contains actual poem content (more flexible check)
+        poem_text = poem_data['text'].lower()
         tweet_lower = tweet_text.lower()
-        poem_content_found = any(word in tweet_lower for word in poem_words if len(word) > 3)
-        if not poem_content_found:
-            return False, "Tweet doesn't contain poem content"
+        
+        # Check if any significant words from poem appear in tweet
+        poem_words = [word.strip('.,!?;:"()[]') for word in poem_text.split() if len(word) > 3]
+        significant_words = [word for word in poem_words if word not in ['the', 'and', 'but', 'for', 'with', 'from', 'that', 'this', 'they', 'have', 'been', 'were', 'said']]
+        
+        if significant_words:
+            poem_content_found = any(word in tweet_lower for word in significant_words[:5])
+            if not poem_content_found:
+                return False, "Tweet doesn't contain poem content"
         
         # If URL included, make sure it's valid
         if url and url in tweet_text:
@@ -314,7 +352,7 @@ class PoetryBot:
                 poem = self.fetch_from_journal(journal)
                 
                 if poem:
-                    # Apply diversity filters
+                    # Apply diversity filters (only if enabled)
                     if self.should_avoid_author(poem['author']):
                         print(f"⏭️  Skipping poem by {poem['author']} - author already featured today")
                         continue
@@ -477,12 +515,15 @@ class PoetryBot:
             else:
                 author = author.text.strip()
             
-            # Try to find poem text with multiple selectors
+            # Try to find poem text with multiple selectors - prioritize poem-specific ones
             poem_content = (soup.find('div', class_='poem') or 
                            soup.find('div', class_='poetry') or
                            soup.find('div', class_='poem-text') or
-                           soup.find('div', class_='entry-content') or
+                           soup.find('div', class_='poem-content') or
+                           soup.find('div', class_='verse') or
+                           soup.find('pre', class_='poem') or
                            soup.find('div', {'data-view': 'poems'}) or
+                           soup.find('div', class_='entry-content') or
                            soup.find('main') or
                            soup.find('article'))
             
@@ -492,23 +533,40 @@ class PoetryBot:
                 # Remove extra whitespace and clean up
                 lines = [line.strip() for line in text.split('\n') if line.strip()]
                 
-                # Remove title/author from poem text if they appear
+                # Remove title/author and navigation text from poem text
                 clean_lines = []
+                navigation_words = [
+                    'add to cart', 'print issues', 'subscribe', 'buy now', 'purchase',
+                    'navigation', 'menu', 'home', 'about', 'contact', 'search',
+                    'previous', 'next', 'back', 'forward', 'page', 'issue',
+                    'volume', 'number', 'table of contents', 'contents',
+                    'click here', 'read more', 'continue reading', 'full text',
+                    'conversations', 'interviews', 'reviews', 'submissions'
+                ]
+                
                 for line in lines:
-                    if (title.lower() not in line.lower() and 
-                        author.lower() not in line.lower() and
-                        'by ' not in line.lower()[:10]):
+                    line_lower = line.lower()
+                    # Skip if contains title, author, or navigation words
+                    if (title.lower() not in line_lower and 
+                        author.lower() not in line_lower and
+                        'by ' not in line_lower[:10] and
+                        not any(nav_word in line_lower for nav_word in navigation_words) and
+                        len(line.strip()) > 5):  # Skip very short lines
                         clean_lines.append(line)
                 
                 text = '\n'.join(clean_lines[:20])  # Limit to first 20 lines
                 
-                if len(text) > 30:  # Make sure we got actual content
-                    return {
-                        'title': title,
-                        'author': author,
-                        'text': text,
-                        'source': source_name
-                    }
+                # Additional validation for actual poem content
+                if len(text) > 30 and len(clean_lines) >= 3:  # Need at least 3 clean lines
+                    # Check if it looks like poetry (not just random text)
+                    words = text.split()
+                    if len(words) >= 10:  # Need reasonable word count
+                        return {
+                            'title': title,
+                            'author': author,
+                            'text': text,
+                            'source': source_name
+                        }
                 
         except Exception as e:
             print(f"Poem extraction failed for {url}: {e}")
@@ -659,61 +717,62 @@ class PoetryBot:
             return None
 
     def format_tweet_text(self, poem):
-        """Format poem as excerpt: 1-2 striking lines + attribution + link"""
-        # Extract striking lines from the poem
+        """Format poem in exact format: "lines" - Author Name \n\n Read more: URL \n\n #WritingCommunity #PoetryCommunity"""
+        # Extract up to 4 striking lines from the poem
         striking_lines = self.select_striking_lines(poem['text'])
         
         # Build the tweet components
-        title = poem['title'][:50]  # Limit title length
-        author = poem['author'][:30]  # Limit author length
-        source = poem.get('source', 'Unknown')
+        author = poem['author'][:50]  # Limit author length
         poem_url = poem.get('url', '')
         
-        # Format: Lines + attribution
-        if 'AI Generated' in author:
-            attribution = f"\n\n— {title}"
+        # Format exactly as requested:
+        # "lines from the poem: at most 4 lines"
+        # - Name of the author
+        # 
+        # Read more: Link to the poem
+        # 
+        # #WritingCommunity #PoetryCommunity
+        
+        # Put lines in quotes
+        quoted_lines = f'"{striking_lines}"'
+        
+        # Author attribution
+        attribution = f"- {author}"
+        
+        # Read more link (if available)
+        if poem_url:
+            read_more = f"Read more: {poem_url}"
         else:
-            attribution = f"\n\n— {author}, \"{title}\""
+            read_more = f"Source: {poem.get('source', 'Literary Journal')}"
         
-        # Add source and link if available
-        if BOT_SETTINGS.get('include_source', True) and source != 'Unknown':
-            if poem_url and len(poem_url) < 60:  # Only include clean, short URLs
-                source_text = f"\n\nRead full poem: {poem_url}"
-            else:
-                source_text = f"\n\nSource: {source}"
-        else:
-            source_text = ""
+        # Hashtags
+        hashtags = "#WritingCommunity #PoetryCommunity"
         
-        # Add relevant hashtags (limit to 2-3 for space)
-        relevant_hashtags = HASHTAGS[:3]
-        hashtag_text = '\n\n' + ' '.join(relevant_hashtags)
-        
-        # Combine all parts
-        tweet_text = striking_lines + attribution + source_text + hashtag_text
+        # Combine all parts with proper spacing
+        tweet_text = f"{quoted_lines}\n{attribution}\n\n{read_more}\n\n{hashtags}"
         
         # Final length check - prioritize the poem content
         if len(tweet_text) > 280:
-            # First, try reducing hashtags
-            hashtag_text = '\n\n' + ' '.join(HASHTAGS[:2])
-            tweet_text = striking_lines + attribution + source_text + hashtag_text
-            
-            if len(tweet_text) > 280:
-                # Remove source text if still too long
-                tweet_text = striking_lines + attribution + hashtag_text
+            # Try shorter lines if too long
+            lines = striking_lines.split('\n')
+            if len(lines) > 2:
+                # Reduce to 2 lines if we have more
+                shorter_lines = '\n'.join(lines[:2])
+                quoted_lines = f'"{shorter_lines}"'
+                tweet_text = f"{quoted_lines}\n{attribution}\n\n{read_more}\n\n{hashtags}"
                 
                 if len(tweet_text) > 280:
-                    # Final resort: truncate lines but keep attribution
-                    available_space = 280 - len(attribution) - len(hashtag_text) - 10
-                    if len(striking_lines) > available_space:
-                        striking_lines = striking_lines[:available_space-3] + "..."
-                    tweet_text = striking_lines + attribution + hashtag_text
+                    # Try just 1 line
+                    single_line = lines[0]
+                    quoted_lines = f'"{single_line}"'
+                    tweet_text = f"{quoted_lines}\n{attribution}\n\n{read_more}\n\n{hashtags}"
         
         return tweet_text[:280]  # Final safety truncation
 
     def post_to_twitter(self, poem, image_path=None):
-        """Post poem to Twitter with validation"""
-        if not self.twitter_api:
-            print("❌ Twitter API not available")
+        """Post poem to Twitter using API v2 with validation"""
+        if not hasattr(self, 'twitter_client') or not self.twitter_client:
+            print("❌ Twitter API v2 not available")
             return False
             
         try:
@@ -732,22 +791,32 @@ class PoetryBot:
             print(tweet_text)
             print("-" * 50)
             
-            # Post with image if available
-            if image_path and os.path.exists(image_path):
+            # Post with image if available (v2 API)
+            media_ids = None
+            if image_path and os.path.exists(image_path) and self.twitter_api:
                 try:
                     media = self.twitter_api.media_upload(image_path)
-                    tweet = self.twitter_api.update_status(status=tweet_text, media_ids=[media.media_id])
-                    print(f"✅ Posted to Twitter with image: {tweet.id}")
+                    media_ids = [media.media_id]
+                    print("✅ Image uploaded successfully")
                 except Exception as e:
                     print(f"⚠️  Image upload failed, posting text only: {e}")
-                    tweet = self.twitter_api.update_status(status=tweet_text)
-                    print(f"✅ Posted to Twitter (text only): {tweet.id}")
-            else:
-                # Post text only
-                tweet = self.twitter_api.update_status(status=tweet_text)
-                print(f"✅ Posted to Twitter: {tweet.id}")
             
-            return True
+            # Post using Twitter API v2
+            response = self.twitter_client.create_tweet(
+                text=tweet_text,
+                media_ids=media_ids
+            )
+            
+            if response.data:
+                tweet_id = response.data['id']
+                if media_ids:
+                    print(f"✅ Posted to Twitter with image: {tweet_id}")
+                else:
+                    print(f"✅ Posted to Twitter: {tweet_id}")
+                return True
+            else:
+                print("❌ Tweet creation failed - no response data")
+                return False
             
         except Exception as e:
             print(f"❌ Twitter posting failed: {e}")
@@ -825,23 +894,10 @@ class PoetryBot:
         # Try to fetch a poem from curated literary journals (random selection)
         poem = self.fetch_poem_from_journals()
         
-        # If that fails, generate with AI as backup (if allowed)
-        if not poem and BOT_SETTINGS.get('backup_to_ai', True):
-            if self.can_use_ai_generation():
-                print("🎨 No poems found from journals, generating AI poem...")
-                poem = self.generate_ai_poem()
-                
-                # Validate AI poem too
-                if poem:
-                    is_valid, message = self.validate_poem_content(poem)
-                    if not is_valid:
-                        print(f"⚠️  AI poem failed validation: {message}")
-                        poem = None
-            else:
-                print("⚠️  AI generation limit reached, skipping AI fallback")
-        
+        # NO AI FALLBACK - Only real poems from literary journals
         if not poem:
-            print("❌ Failed to get any valid poem")
+            print("❌ Failed to get any valid poem from literary journals")
+            print("🚫 AI generation is disabled - only real poems allowed")
             return False
             
         print(f"📝 Selected poem: '{poem['title']}' by {poem['author']}")

@@ -1,11 +1,18 @@
-name: Daily Poetry Bot - Two Posts
+name: Daily Poetry Bot - 10 Posts
 
 on:
   schedule:
-    # Morning post at 9:00 AM UTC (4:00 AM EST / 1:00 AM PST)
-    - cron: '0 9 * * *'
-    # Evening post at 9:00 PM UTC (4:00 PM EST / 1:00 PM PST)  
-    - cron: '0 21 * * *'
+    # 10 posts per day - every ~2.4 hours (300 posts/month, well within 500 limit)
+    - cron: '0 0 * * *'    # 12:00 AM UTC
+    - cron: '24 2 * * *'   # 2:24 AM UTC  
+    - cron: '48 4 * * *'   # 4:48 AM UTC
+    - cron: '12 7 * * *'   # 7:12 AM UTC
+    - cron: '36 9 * * *'   # 9:36 AM UTC
+    - cron: '0 12 * * *'   # 12:00 PM UTC
+    - cron: '24 14 * * *'  # 2:24 PM UTC
+    - cron: '48 16 * * *'  # 4:48 PM UTC
+    - cron: '12 19 * * *'  # 7:12 PM UTC
+    - cron: '36 21 * * *'  # 9:36 PM UTC
   
   # Allow manual triggering for testing
   workflow_dispatch:
@@ -37,12 +44,39 @@ jobs:
       id: post-time
       run: |
         current_hour=$(date -u +%H)
-        if [ "$current_hour" -eq "9" ]; then
-          echo "post_type=morning" >> $GITHUB_OUTPUT
+        current_minute=$(date -u +%M)
+        
+        # Determine which of the 10 daily posts this is
+        if [ "$current_hour" -eq "0" ] && [ "$current_minute" -eq "0" ]; then
+          echo "post_type=midnight" >> $GITHUB_OUTPUT
           echo "post_number=1" >> $GITHUB_OUTPUT
-        elif [ "$current_hour" -eq "21" ]; then
-          echo "post_type=evening" >> $GITHUB_OUTPUT  
+        elif [ "$current_hour" -eq "2" ] && [ "$current_minute" -eq "24" ]; then
+          echo "post_type=early_morning" >> $GITHUB_OUTPUT
           echo "post_number=2" >> $GITHUB_OUTPUT
+        elif [ "$current_hour" -eq "4" ] && [ "$current_minute" -eq "48" ]; then
+          echo "post_type=dawn" >> $GITHUB_OUTPUT
+          echo "post_number=3" >> $GITHUB_OUTPUT
+        elif [ "$current_hour" -eq "7" ] && [ "$current_minute" -eq "12" ]; then
+          echo "post_type=morning" >> $GITHUB_OUTPUT
+          echo "post_number=4" >> $GITHUB_OUTPUT
+        elif [ "$current_hour" -eq "9" ] && [ "$current_minute" -eq "36" ]; then
+          echo "post_type=mid_morning" >> $GITHUB_OUTPUT
+          echo "post_number=5" >> $GITHUB_OUTPUT
+        elif [ "$current_hour" -eq "12" ] && [ "$current_minute" -eq "0" ]; then
+          echo "post_type=noon" >> $GITHUB_OUTPUT
+          echo "post_number=6" >> $GITHUB_OUTPUT
+        elif [ "$current_hour" -eq "14" ] && [ "$current_minute" -eq "24" ]; then
+          echo "post_type=afternoon" >> $GITHUB_OUTPUT
+          echo "post_number=7" >> $GITHUB_OUTPUT
+        elif [ "$current_hour" -eq "16" ] && [ "$current_minute" -eq "48" ]; then
+          echo "post_type=late_afternoon" >> $GITHUB_OUTPUT
+          echo "post_number=8" >> $GITHUB_OUTPUT
+        elif [ "$current_hour" -eq "19" ] && [ "$current_minute" -eq "12" ]; then
+          echo "post_type=evening" >> $GITHUB_OUTPUT
+          echo "post_number=9" >> $GITHUB_OUTPUT
+        elif [ "$current_hour" -eq "21" ] && [ "$current_minute" -eq "36" ]; then
+          echo "post_type=night" >> $GITHUB_OUTPUT
+          echo "post_number=10" >> $GITHUB_OUTPUT
         else
           echo "post_type=manual" >> $GITHUB_OUTPUT
           echo "post_number=1" >> $GITHUB_OUTPUT
