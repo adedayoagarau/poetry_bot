@@ -2,12 +2,12 @@
 
 # Bot Settings
 BOT_SETTINGS = {
-    'posts_per_day': 2,
-    'max_ai_posts_per_day': 1,
-    'avoid_repeat_sources': True,
-    'avoid_repeat_authors': True,
+    'posts_per_day': 10,
+    'max_ai_posts_per_day': 2,
+    'avoid_repeat_sources': False,  # Allow repeat sources for 10 posts/day
+    'avoid_repeat_authors': False,  # Allow repeat authors for 10 posts/day
     'upload_media_v1_1': False,
-    'post_times_utc': ['09:00', '21:00']
+    'post_times_utc': ['06:00', '08:00', '10:00', '12:00', '14:00', '16:00', '18:00', '20:00', '22:00', '00:00']
 }
 
 # Weighted journal list for poem selection
