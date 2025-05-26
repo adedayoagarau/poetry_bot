@@ -11,7 +11,7 @@ import re
 from datetime import datetime
 from dotenv import load_dotenv
 from poetry_bot import PoetryBot
-from config import BOT_SETTINGS, LITERARY_JOURNALS
+from config import BOT_SETTINGS
 
 def test_environment():
     """Test if all environment variables are set"""

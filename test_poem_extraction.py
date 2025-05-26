@@ -4,7 +4,7 @@ Test poem extraction from different literary journals
 """
 
 from poetry_bot import PoetryBot
-from config import LITERARY_JOURNALS
+from config import get_weighted_journal_list
 import random
 import requests
 from bs4 import BeautifulSoup
@@ -31,7 +31,7 @@ def test_poem_sources():
         
         # Find the journal config
         journal = None
-        for j in LITERARY_JOURNALS:
+        for j in get_weighted_journal_list():
             if j['name'] == source_name:
                 journal = j
                 break

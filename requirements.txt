@@ -1,8 +1,5 @@
-# Instagram API
-instagrapi==2.1.5
-
-# Image processing
-Pillow==10.1.0
+# Twitter API
+tweepy==4.14.0
 
 # Web scraping
 requests==2.31.0

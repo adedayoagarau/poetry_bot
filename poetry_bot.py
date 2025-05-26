@@ -843,7 +843,7 @@ class PoetryBot:
         total_posts = BOT_SETTINGS.get('posts_per_day', 2)
         
         print(f"📊 Starting Twitter post {post_number} of {total_posts} for today")
-        print(f"🎲 Using random selection from {len(LITERARY_JOURNALS)} curated sources")
+        print(f"🎲 Using random selection from {len(get_weighted_journal_list())} curated sources")
         print("🎯 Equal opportunity for all poets!")
         
         # Try to fetch a poem from curated literary journals (random selection)
