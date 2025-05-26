@@ -1,29 +1,52 @@
-# Logs
-logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-dev-debug.log
-
-# Dependency directories
-node_modules/
-
-# Environment variables
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+poetry_env/
 .env
+.env.local
+.env.*.local
 
-# Editor directories and files
-.idea
-.vscode
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
 
-# OS specific
+# OS
 .DS_Store
+Thumbs.db
 
-# Task files
-tasks.json
-tasks/ 
+# Project specific
+*.png
+*.jpg
+*.jpeg
+poetry_log.json
+
+# Never commit credentials or sensitive files
+credentials.json
+secrets.json
+api_keys.txt
+*.key
+*.pem
+*.p12
+*.pfx
+session_*.json
+instagram_session_*.json
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+
+# Task Master files (if using)
+.taskmasterconfig
+tasks/
+scripts/
