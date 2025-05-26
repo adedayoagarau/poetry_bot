@@ -13,8 +13,9 @@ on:
     - cron: '48 16 * * *'  # 4:48 PM UTC
     - cron: '12 19 * * *'  # 7:12 PM UTC
     - cron: '36 21 * * *'  # 9:36 PM UTC
-  
-  # Allow manual triggering for testing
+  push:
+    branches:
+      - main
   workflow_dispatch:
     inputs:
       test_mode:
@@ -81,6 +82,12 @@ jobs:
           echo "post_type=manual" >> $GITHUB_OUTPUT
           echo "post_number=1" >> $GITHUB_OUTPUT
         fi
+        
+    - name: Display poetry_bot.py contents
+      run: |
+        echo "--- Start of poetry_bot.py ---"
+        head -n 20 poetry_bot.py  # Or your poetry_bot.py path if it's not in root
+        echo "--- End of poetry_bot.py ---"
         
     - name: Run Twitter Poetry Bot
       env:
