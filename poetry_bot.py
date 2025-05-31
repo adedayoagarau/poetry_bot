@@ -18,6 +18,15 @@ import re
 # Load environment variables from .env file
 load_dotenv()
 
+# Poetry themes for AI generation
+POETRY_THEMES = [
+    "nature", "love", "loss", "hope", "memory", "time", "seasons", "dreams", 
+    "solitude", "friendship", "family", "journey", "home", "freedom", "peace",
+    "courage", "beauty", "change", "growth", "reflection", "wonder", "gratitude",
+    "resilience", "connection", "silence", "light", "darkness", "ocean", "mountains",
+    "stars", "rain", "sunrise", "sunset", "childhood", "wisdom", "healing"
+]
+
 class PoetryBot:
     def __init__(self):
         # Initialize Twitter API
@@ -665,81 +674,10 @@ class PoetryBot:
         return True, "Tweet content validated successfully"
 
     def generate_ai_poem(self):
-        """Generate a poem using AI APIs - equal opportunity themes"""
-        if not self.can_use_ai_generation():
-            print(f"⚠️  AI generation limit reached for today ({self.daily_posts['ai_posts_count']}/{BOT_SETTINGS.get('max_ai_posts_per_day', 1)})")
-            return None
-        
-        # Random theme selection - all themes have equal opportunity
-        theme = random.choice(POETRY_THEMES)
-        
-        # Simple, universal prompt
-        prompt = f"Write a beautiful, evocative poem about {theme}. Keep it under 300 characters. Focus on striking imagery and memorable lines."
-        
-        # Try different AI services
-        poem = None
-        
-        # Try Gemini first (free tier available)
-        if os.getenv('GEMINI_API_KEY') and not poem:
-            try:
-                model = genai.GenerativeModel('gemini-1.5-flash')
-                response = model.generate_content(prompt)
-                poem_text = response.text.strip()
-                
-                poem = {
-                    'title': f"Inspired by {theme}",
-                    'author': 'AI Generated',
-                    'text': poem_text,
-                    'source': 'Gemini AI'
-                }
-            except Exception as e:
-                print(f"Gemini generation failed: {e}")
-        
-        # Try Claude
-        if self.claude_client and not poem:
-            try:
-                response = self.claude_client.messages.create(
-                    model="claude-3-sonnet-20240229",
-                    max_tokens=200,
-                    messages=[{"role": "user", "content": prompt}]
-                )
-                poem_text = response.content[0].text.strip()
-                
-                poem = {
-                    'title': f"Inspired by {theme}",
-                    'author': 'AI Generated',
-                    'text': poem_text,
-                    'source': 'Claude AI'
-                }
-            except Exception as e:
-                print(f"Claude generation failed: {e}")
-        
-        # Try OpenAI as fallback
-        if os.getenv('OPENAI_API_KEY') and not poem:
-            try:
-                client = openai.OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
-                response = client.chat.completions.create(
-                    model="gpt-3.5-turbo",
-                    messages=[{"role": "user", "content": prompt}],
-                    max_tokens=200
-                )
-                poem_text = response.choices[0].message.content.strip()
-                
-                poem = {
-                    'title': f"Inspired by {theme}",
-                    'author': 'AI Generated',
-                    'text': poem_text,
-                    'source': 'OpenAI'
-                }
-            except Exception as e:
-                print(f"OpenAI generation failed: {e}")
-        
-        if poem:
-            # Track AI usage
-            self.daily_posts['ai_posts_count'] += 1
-            self.daily_posts['sources'].append(poem['source'])
-        
-        return poem
+        """AI generation is DISABLED - only real poems from literary sources allowed"""
+        print("🚫 AI poem generation is permanently disabled")
+        print("📚 Only posting real poems from literary journals and magazines")
+        return None
 
     def format_tweet_text(self, poem):
         """Format poem in exact format: "lines" - Author Name \n\n Read more: URL \n\n #WritingCommunity #PoetryCommunity"""
@@ -849,10 +787,10 @@ class PoetryBot:
         # Try to fetch a poem from curated literary journals (random selection)
         poem = self.fetch_poem_from_journals()
         
-        # NO AI FALLBACK - Only real poems from literary journals
+        # NEVER USE AI GENERATION - Only real poems from literary journals
         if not poem:
             print("❌ Failed to get any valid poem from literary journals")
-            print("🚫 AI generation is disabled - only real poems allowed")
+            print("🚫 NEVER posting AI-generated content - only real poems from literary sources")
             return False
             
         print(f"📝 Selected poem: '{poem['title']}' by {poem['author']}")

@@ -3,7 +3,7 @@
 # Bot Settings
 BOT_SETTINGS = {
     'posts_per_day': 10,
-    'max_ai_posts_per_day': 2,
+    'max_ai_posts_per_day': 0,  # NEVER post AI-generated content
     'avoid_repeat_sources': False,  # Allow repeat sources for 10 posts/day
     'avoid_repeat_authors': False,  # Allow repeat authors for 10 posts/day
     'upload_media_v1_1': False,

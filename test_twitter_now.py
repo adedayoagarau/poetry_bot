@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Quick Twitter test - Generate and post AI poem right now
+Quick Twitter test - Find and post real poem from literary sources
 """
 
 from poetry_bot import PoetryBot
@@ -12,12 +12,13 @@ def test_twitter_post():
     # Create bot
     bot = PoetryBot()
     
-    # Force AI generation for demo
-    print('🎨 Generating AI poem for Twitter demo...')
-    poem = bot.generate_ai_poem()
+    # Get real poem from literary sources
+    print('📚 Finding real poem from literary journals...')
+    poem = bot.fetch_poem_from_journals()
     
     if poem:
-        print(f'✅ Generated poem: "{poem["title"]}" by {poem["author"]}')
+        print(f'✅ Found poem: "{poem["title"]}" by {poem["author"]}')
+        print(f'📍 Source: {poem["source"]}')
         print(f'📝 Text preview: {poem["text"][:100]}...')
         
         # Create tweet
@@ -37,7 +38,8 @@ def test_twitter_post():
             print('❌ Twitter posting failed')
             return False
     else:
-        print('❌ AI poem generation failed')
+        print('❌ No real poems found from literary sources')
+        print('🚫 AI generation is disabled - only real poems allowed')
         return False
 
 if __name__ == "__main__":
