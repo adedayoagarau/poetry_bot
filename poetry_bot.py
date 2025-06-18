@@ -420,10 +420,10 @@ class PoetryBot:
 class TwitterPoetryBot(PoetryBot):
     """Twitter-specific poetry bot (extends main bot)"""
     
-    def post_poem(self, poem):
-    """Post poem to Twitter with elegant formatting - LIVE POSTING"""
-    if not poem:
-        return False
+def post_poem(self, poem):
+        """Post poem to Twitter with elegant formatting - LIVE POSTING"""
+        if not poem:
+            return False
     
     # Create source hashtag (remove spaces and dots)
     source_hashtag = f"#{poem['source'].replace(' ', '').replace('.', '')}"
