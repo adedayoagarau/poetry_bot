@@ -1,854 +1,150 @@
-import os
-import random
-import requests
-import tweepy
-from datetime import datetime, timedelta
-import openai
-import google.generativeai as genai
-import anthropic
-import textwrap
-from bs4 import BeautifulSoup
-import json
-from dotenv import load_dotenv
-from config import *
-from poem_link_discovery import get_poem_links, SITE_CONFIGS
-from urllib.parse import urlparse
-import re
-
-# Load environment variables from .env file
-load_dotenv()
-
-# Poetry themes for AI generation
-POETRY_THEMES = [
-    "nature", "love", "loss", "hope", "memory", "time", "seasons", "dreams", 
-    "solitude", "friendship", "family", "journey", "home", "freedom", "peace",
-    "courage", "beauty", "change", "growth", "reflection", "wonder", "gratitude",
-    "resilience", "connection", "silence", "light", "darkness", "ocean", "mountains",
-    "stars", "rain", "sunrise", "sunset", "childhood", "wisdom", "healing"
-]
-
-class PoetryBot:
-    def __init__(self):
-        # Initialize Twitter API
-        self.setup_twitter()
-        
-        # Initialize AI APIs
-        self.setup_ai_apis()
-        
-        # Track daily posts to avoid duplicates
-        self.daily_posts = {
-            'authors': [],
-            'sources': [],
-            'poems_posted': [],
-            'ai_posts_count': 0,
-            'date': datetime.now().strftime('%Y-%m-%d')
-        }
-        
-        # Cache discovered poem URLs to avoid repeated discovery
-        self.poem_url_cache = {}
-        
-    def setup_twitter(self):
-        """Set up Twitter API v2 connection"""
-        try:
-            # Use Twitter API v2 client (compatible with free tier)
-            self.twitter_client = tweepy.Client(
-                consumer_key=os.getenv('TWITTER_API_KEY'),
-                consumer_secret=os.getenv('TWITTER_API_SECRET'),
-                access_token=os.getenv('TWITTER_ACCESS_TOKEN'),
-                access_token_secret=os.getenv('TWITTER_ACCESS_TOKEN_SECRET'),
-                wait_on_rate_limit=True
-            )
-            
-            # Also keep v1.1 API for media upload if needed
-            if BOT_SETTINGS.get('upload_media_v1_1', False):
-                auth = tweepy.OAuthHandler(
-                    os.getenv('TWITTER_API_KEY'),
-                    os.getenv('TWITTER_API_SECRET')
-                )
-                auth.set_access_token(
-                    os.getenv('TWITTER_ACCESS_TOKEN'),
-                    os.getenv('TWITTER_ACCESS_TOKEN_SECRET')
-                )
-                self.twitter_api = tweepy.API(auth)
-                print("✅ Twitter API v1.1 (for media) initialized.")
-            else:
-                self.twitter_api = None
-                print("ℹ️ Twitter API v1.1 (for media) not initialized as per settings.")
-
-            print("✅ Twitter API v2 connected successfully")
-        except Exception as e:
-            print(f"❌ Twitter API connection failed: {e}")
-            self.twitter_client = None
-            self.twitter_api = None
-            
-    def setup_ai_apis(self):
-        """Set up AI API connections"""
-        # OpenAI
-        if os.getenv('OPENAI_API_KEY'):
-            openai.api_key = os.getenv('OPENAI_API_KEY')
-            print("✅ OpenAI API connected")
-        
-        # Gemini
-        if os.getenv('GEMINI_API_KEY'):
-            genai.configure(api_key=os.getenv('GEMINI_API_KEY'))
-            print("✅ Gemini API connected")
-            
-        # Claude
-        if os.getenv('CLAUDE_API_KEY'):
-            self.claude_client = anthropic.Anthropic(api_key=os.getenv('CLAUDE_API_KEY'))
-            print("✅ Claude API connected")
-        else:
-            self.claude_client = None
-
-    def check_daily_reset(self):
-        """Reset daily tracking if it's a new day"""
-        current_date = datetime.now().strftime('%Y-%m-%d')
-        if self.daily_posts['date'] != current_date:
-            self.daily_posts = {
-                'authors': [],
-                'sources': [],
-                'poems_posted': [],
-                'ai_posts_count': 0,
-                'date': current_date
-            }
-            print(f"🔄 Reset for new day: {current_date}")
-
-    def should_avoid_source(self, source_name):
-        """Check if we should avoid this source for diversity"""
-        if not BOT_SETTINGS.get('avoid_repeat_sources', True):
-            return False
-        return source_name in self.daily_posts['sources']
-
-    def should_avoid_author(self, author_name):
-        """Check if we should avoid this author for diversity"""
-        if not BOT_SETTINGS.get('avoid_repeat_authors', True):
-            return False
-        return author_name in self.daily_posts['authors']
-
-    def can_use_ai_generation(self):
-        """Check if we can generate AI content based on daily limits"""
-        max_ai_posts = BOT_SETTINGS.get('max_ai_posts_per_day', 1)
-        return self.daily_posts['ai_posts_count'] < max_ai_posts
-
-    def get_post_number_today(self):
-        """Determine which post of the day this is"""
-        return len(self.daily_posts['poems_posted']) + 1
-
-    def get_poem_urls_for_domain(self, domain):
-        """Get cached poem URLs for a domain or discover them"""
-        if domain not in self.poem_url_cache:
-            print(f"🔍 Discovering poem URLs for {domain}...")
-            
-            if domain in SITE_CONFIGS:
-                config = SITE_CONFIGS[domain]
-                all_urls = []
-                
-                # Try each base URL
-                for base_url in config['base_urls']:
-                    try:
-                        urls = get_poem_links(base_url, config)
-                        all_urls.extend(urls)
-                    except Exception as e:
-                        print(f"⚠️  Failed to discover from {base_url}: {e}")
-                
-                # Remove duplicates and cache
-                unique_urls = list(set(all_urls))
-                self.poem_url_cache[domain] = unique_urls
-                print(f"✅ Cached {len(unique_urls)} poem URLs for {domain}")
-            else:
-                self.poem_url_cache[domain] = []
-                print(f"⚠️  No configuration found for {domain}")
-        
-        return self.poem_url_cache[domain]
-
-    def fetch_poem_from_journals(self):
-        """Fetch a poem from curated literary journals using discovered URLs"""
-        from config import get_weighted_journal_list
-        
-        # Get weighted list (preferred sources appear more frequently)  
-        weighted_journals = get_weighted_journal_list()
-        
-        # Shuffle for true randomness
-        random.shuffle(weighted_journals)
-        
-        # Try journals randomly, applying diversity filters
-        for journal in weighted_journals:
-            # Skip if we've already used this source today
-            if self.should_avoid_source(journal['name']):
-                continue
-                
-            try:
-                print(f"🎲 Randomly selected: {journal['name']}")
-                
-                # Get domain from journal URL
-                domain = urlparse(journal['url']).netloc
-                
-                # Get poem URLs for this domain
-                poem_urls = self.get_poem_urls_for_domain(domain)
-                
-                if not poem_urls:
-                    print(f"⚠️  No poem URLs found for {domain}")
-                    continue
-                
-                # Try random poem URLs from this domain
-                random.shuffle(poem_urls)
-                
-                for poem_url in poem_urls[:5]:  # Try up to 5 URLs
-                    print(f"  📄 Trying poem at: {poem_url}")
-                    poem = self.extract_poem_from_url(poem_url, journal['name'])
-                    
-                    if poem:
-                        # Apply diversity filters (only if enabled)
-                        if self.should_avoid_author(poem['author']):
-                            print(f"⏭️  Skipping poem by {poem['author']} - author already featured today")
-                            continue
-                        
-                        # Validate the poem content
-                        is_valid, message = self.validate_poem_content(poem, poem_url)
-                        if is_valid:
-                            print(f"✅ Found valid poem from {journal['name']}")
-                            # Track this selection
-                            self.daily_posts['sources'].append(journal['name'])
-                            self.daily_posts['authors'].append(poem['author'])
-                            poem['url'] = poem_url  # Store the source URL
-                            return poem
-                        else:
-                            print(f"⚠️  Poem from {journal['name']} failed validation: {message}")
-                            continue
-                
-            except Exception as e:
-                print(f"❌ {journal['name']} failed with error: {e}")
-                continue
-        
-        print("📚 No valid poems found from literary journals")
-        return None
-
-    def extract_poem_from_url(self, url, source_name="Unknown"):
-        """Extract poem content from a specific URL"""
+def validate_poem_content(self, poem_data, url=None):
+    """Enhanced validation that poem content is real and complete"""
+    if not poem_data:
+        return False, "No poem data provided"
+    
+    # Check required fields
+    required_fields = ['title', 'author', 'text', 'source']
+    for field in required_fields:
+        if not poem_data.get(field):
+            return False, f"Missing required field: {field}"
+    
+    text = poem_data['text'].strip()
+    title = poem_data['title'].strip()
+    
+    # ENHANCED: URL accessibility check
+    if url:
         try:
             headers = {'User-Agent': 'Mozilla/5.0 (compatible; PoetryBot/1.0)'}
-            response = requests.get(url, headers=headers, timeout=15)
-            
-            if response.status_code != 200:
-                print(f"❌ HTTP {response.status_code} for {url}")
-                return None
-                
-            soup = BeautifulSoup(response.content, 'html.parser')
-            
-            # Extract title - try multiple selectors
-            title = "Untitled"
-            
-            # First try to extract from page title (Poetry Daily specific)
-            page_title_elem = soup.find('title')
-            if page_title_elem:
-                page_title = page_title_elem.get_text().strip()
-                if ' – Poetry Daily' in page_title:
-                    title = page_title.replace(' – Poetry Daily', '').strip()
-            
-            # If that didn't work, try other selectors
-            if title == "Untitled":
-                title_selectors = [
-                    'h2',  # Poetry Daily uses h2 for poem titles
-                    'h1', 'h2.title', '.poem-title', '.title', 
-                    'h1.entry-title', 'h2.entry-title', '.post-title'
-                ]
-                
-                for selector in title_selectors:
-                    title_elem = soup.select_one(selector)
-                    if title_elem:
-                        candidate_title = title_elem.get_text().strip()
-                        # Skip generic titles
-                        if candidate_title and candidate_title not in ['Featured Poet', 'Featured Translator', 'Receive POETRY DAILY']:
-                            title = candidate_title
-                            break
-            
-            # Extract author - try multiple selectors
-            author = "Unknown"
-            author_selectors = [
-                '.daily_poem_author',  # Poetry Daily specific
-                '.author', '.poet', '.byline', '.poem-author',
-                'span.author', 'p.author', 'div.author',
-                'a[href*="/poet"]', 'a[href*="/author"]'
-            ]
-            
-            for selector in author_selectors:
-                author_elem = soup.select_one(selector)
-                if author_elem:
-                    candidate_author = author_elem.get_text().strip()
-                    # Clean up author name
-                    candidate_author = re.sub(r'^(by\s+)', '', candidate_author, flags=re.IGNORECASE)
-                    candidate_author = re.sub(r'(,.*$)', '', candidate_author)
-                    # Skip non-author text
-                    if candidate_author and candidate_author not in ['Instagram', 'Facebook', 'Twitter']:
-                        author = candidate_author
-                        break
-            
-            # If no author found, try text patterns
-            if author == "Unknown":
-                text_content = soup.get_text()
-                author_match = re.search(r'by\s+([^\n,]+)', text_content, re.IGNORECASE)
-                if author_match:
-                    author = author_match.group(1).strip()
-            
-            # Extract poem text - try multiple selectors
-            poem_content = None
-            poem_selectors = [
-                '.elementor-widget-theme-post-content',  # Poetry Daily specific
-                '.poem', '.poetry', '.poem-text', '.poem-content', 
-                '.verse', 'pre.poem', '.entry-content', 
-                'main', 'article', '.post-content'
-            ]
-            
-            for selector in poem_selectors:
-                content = soup.select_one(selector)
-                if content:
-                    poem_content = content
-                    break
-            
-            if not poem_content:
-                print(f"⚠️  No poem content found at {url}")
-                return None
-            
-            # Extract and clean poem text
-            poem_text = poem_content.get_text(separator='\n').strip()
-            lines = [line.strip() for line in poem_text.split('\n') if line.strip()]
-            
-            # Clean up lines - remove navigation, metadata, etc.
-            clean_lines = []
-            exclude_patterns = [
-                'subscribe', 'newsletter', 'archive', 'browse', 'search',
-                'about', 'contact', 'home', 'menu', 'navigation',
-                'read more', 'continue reading', 'full text',
-                'print issues', 'buy now', 'purchase', 'add to cart',
-                'interviews', 'reviews', 'submissions', 'guidelines',
-                'editorial', 'editor', 'staff', 'masthead',
-                'winner', 'finalist', 'contest', 'award',
-                'university', 'college', 'press', 'publisher',
-                'www.', 'http', '.com', '.org'
-            ]
-            
-            for line in lines:
-                line_lower = line.lower()
-                
-                # Skip if contains title, author, or excluded patterns
-                if (title.lower() not in line_lower and 
-                    author.lower() not in line_lower and
-                    'by ' not in line_lower[:10] and
-                    not any(pattern in line_lower for pattern in exclude_patterns) and
-                    len(line.strip()) > 5 and
-                    not line.strip().startswith('(') and
-                    not line.strip().endswith(')') and
-                    '//' not in line):
-                    clean_lines.append(line)
-            
-            # Take first 20 lines of actual poem content
-            poem_text = '\n'.join(clean_lines[:20])
-            
-            if len(poem_text) > 50 and len(clean_lines) >= 3:
-                return {
-                    'title': title,
-                    'author': author,
-                    'text': poem_text,
-                    'source': source_name
-                }
-            
-            print(f"⚠️  Insufficient poem content after cleaning from {url}")
-            return None
-            
+            response = requests.head(url, headers=headers, timeout=5, allow_redirects=True)
+            if response.status_code >= 400:
+                return False, f"URL not accessible: HTTP {response.status_code}"
         except Exception as e:
-            print(f"❌ Poem extraction failed for {url}: {e}")
-            return None
-
-    def select_striking_lines(self, poem_text):
-        """Select up to 4 most striking lines from a poem"""
-        lines = [line.strip() for line in poem_text.split('\n') if line.strip()]
-        
-        if not lines:
-            return poem_text[:100] + "..." if len(poem_text) > 100 else poem_text
-        
-        # If poem is very short (1-4 lines), use it all
-        if len(lines) <= 4:
-            return '\n'.join(lines)
-        
-        # Look for lines with striking imagery, emotion, or memorable phrases
-        striking_indicators = [
-            # Imagery words
-            'light', 'shadow', 'moon', 'sun', 'star', 'ocean', 'fire', 'wind',
-            'silence', 'whisper', 'thunder', 'rain', 'snow', 'flower', 'tree',
-            # Emotional words  
-            'love', 'heart', 'soul', 'dream', 'hope', 'fear', 'joy', 'pain',
-            'remember', 'forget', 'lost', 'found', 'broken', 'whole',
-            # Action/movement
-            'dance', 'sing', 'fly', 'fall', 'rise', 'run', 'walk', 'breathe'
-        ]
-        
-        scored_lines = []
-        for i, line in enumerate(lines):
-            score = 0
-            line_lower = line.lower()
-            
-            # Score based on striking words
-            for word in striking_indicators:
-                if word in line_lower:
-                    score += 1
-            
-            # Prefer lines that aren't too short or too long
-            if 10 <= len(line) <= 100:
-                score += 2
-            
-            # Prefer lines with interesting punctuation
-            if any(char in line for char in '!?—;:'):
-                score += 1
-                
-            # Avoid very generic or connecting lines
-            generic_starters = ['and', 'but', 'the', 'it', 'this', 'that', 'or', 'if']
-            if not any(line_lower.startswith(starter) for starter in generic_starters):
-                score += 1
-            
-            scored_lines.append((score, i, line))
-        
-        # Sort by score and select best lines (up to 4)
-        scored_lines.sort(reverse=True, key=lambda x: x[0])
-        
-        # Take up to 4 best lines, preferring consecutive ones when possible
-        selected_lines = []
-        used_indices = set()
-        
-        for score, index, line in scored_lines:
-            if len(selected_lines) >= 4:
-                break
-            if index not in used_indices:
-                selected_lines.append((index, line))
-                used_indices.add(index)
-        
-        # Sort selected lines by their original order in the poem
-        selected_lines.sort(key=lambda x: x[0])
-        return '\n'.join([line[1] for line in selected_lines])
-
-    def validate_poem_content(self, poem_data, url=None):
-        """Validate that poem content is real and complete"""
-        if not poem_data:
-            return False, "No poem data provided"
-        
-        # Check required fields
-        required_fields = ['title', 'author', 'text', 'source']
-        for field in required_fields:
-            if not poem_data.get(field):
-                return False, f"Missing required field: {field}"
-        
-        # Validate poem text quality
-        text = poem_data['text'].strip()
-        title = poem_data['title'].strip()
-        
-        # Check minimum length (avoid fragments)
-        if len(text) < 30:
-            return False, "Poem text too short (likely incomplete)"
-        
-        # Check for common error patterns
-        error_patterns = [
-            'page not found', '404', 'error', 'access denied',
-            'subscription required', 'login required', 'not available',
-            'coming soon', 'under construction', 'temporarily unavailable'
-        ]
-        
-        text_lower = text.lower()
-        title_lower = title.lower()
-        
-        for pattern in error_patterns:
-            if pattern in text_lower:
-                return False, f"Content contains error pattern: {pattern}"
-        
-        # ENHANCED: Check for essay/review/critical content in title
-        essay_title_indicators = [
-            'review of', 'a review', 'essay', 'critical essay', 'interview',
-            'conversation with', 'profile', 'announcement', 'news', 'wins',
-            'winner', 'prize', 'award', 'selected poems', 'new and selected',
-            'building the perfect', 'poetry and lightness', 'lightness',
-            'six memos', 'memoir', 'biography', 'about', 'on writing',
-            'craft essay', 'poetics', 'ars poetica'
-        ]
-        
-        for indicator in essay_title_indicators:
-            if indicator in title_lower:
-                return False, f"Title indicates essay/review content: '{indicator}' in '{title}'"
-        
-        # Check that it looks like actual poetry (not just navigation text or prose)
-        lines = [line.strip() for line in text.split('\n') if line.strip()]
-        if len(lines) < 2:
-            return False, "Insufficient poem content (needs multiple lines)"
-        
-        # Avoid poems that are just titles/headers
-        if all(len(line) < 10 for line in lines):
-            return False, "Lines too short (likely navigation text)"
-        
-        # ENHANCED: Check for prose vs poetry indicators
-        # Poetry typically has shorter lines, more line breaks, less dense text
-        avg_line_length = sum(len(line) for line in lines) / len(lines) if lines else 0
-        long_lines = sum(1 for line in lines if len(line) > 100)
-        very_long_lines = sum(1 for line in lines if len(line) > 200)
-        
-        # If most lines are very long, it's likely prose, not poetry
-        if avg_line_length > 80 and long_lines > len(lines) * 0.7:
-            return False, "Content appears to be prose, not poetry (long lines)"
-        
-        # If we have very long lines (200+ chars), it's almost certainly prose
-        if very_long_lines > len(lines) * 0.3:
-            return False, "Content appears to be prose, not poetry (very long lines)"
-        
-        # ENHANCED: Check for essay/article indicators (more comprehensive)
-        prose_indicators = [
-            'paragraph', 'essay', 'article', 'chapter', 'section',
-            'in this piece', 'the author', 'the writer', 'the poet writes',
-            'according to', 'as mentioned', 'furthermore', 'however',
-            'in conclusion', 'to summarize', 'for example', 'such as',
-            'calvino', 'italo calvino', 'six memos', 'lightness',
-            'collection', 'book of poetry', 'draws from', 'covers a range',
-            'most compelling when', 'we find', 'therein we find',
-            'what begins as', 'american poetry landscape', 'increasingly dominated',
-            'feel like a refreshing', 'return to', 'lyric poetry',
-            'the opening poem', 'the collection', 'in fiction',
-            'transformation needs', 'slow build-up', 'in poetry',
-            'can be transformative', 'as wordsworth writes',
-            'the speaker', 'voice is', 'casually disarming',
-            'equally accessible', 'compelling', 'occasionally',
-            'drawing on', 'richard drew', 'infamous', 'two refrains',
-            'evoke the compulsive', 'leaves us with'
-        ]
-        
-        # Check for navigation/table of contents indicators
-        navigation_indicators = [
-            'shortlist', 'table of contents', 'contents', 'issue', 'volume',
-            'poem of the year', 'winner', 'finalist', 'submission', 'contest',
-            'featured', 'latest', 'recent', 'archive', 'browse', 'category',
-            'genre', 'author index', 'title index', 'search results',
-            'subscriptions', 'international orders', 'support us', 'bananas, sweetheart',
-            'pdnews', 'hot off the presses', 'what sparks poetry', 'book features',
-            'features', 'news', 'archives', 'media kit', 'editorial board',
-            'welcome publishers', 'messages to readers', 'essay:', 'announcement:',
-            'profile:', 'interview:', 'from the book', 'read today', 'connect',
-            'appearance', 'signature project', 'macarthur', 'national book award',
-            'poet laureate', 'pulitzer prize', 'griffin poetry prize'
-        ]
-        
-        prose_count = sum(1 for indicator in prose_indicators if indicator in text_lower)
-        nav_count = sum(1 for indicator in navigation_indicators if indicator in text_lower)
-        
-        # ENHANCED: Lower thresholds for stricter validation
-        if prose_count >= 2:  # Reduced from 3
-            return False, f"Content appears to be prose/essay about poetry, not actual poetry (prose indicators: {prose_count})"
-        
-        if nav_count >= 2:
-            return False, "Content appears to be navigation/table of contents, not actual poetry"
-        
-        # ENHANCED: Check for specific problematic line patterns we've encountered
-        problematic_patterns = [
-            'essay:', 'announcement:', 'profile:', 'interview:', 'mentions of',
-            'scientists use', 'atwood with be', 'marie howe wins', 'double dreaming',
-            'if i were to choose one principle', 'guided me while writing',
-            'full-length poetry collection', 'chronicle of drifting',
-            'copper canyon press', 'calvino celebrates', 'practice lightness',
-            'subtraction of weight', 'poets practice lightness',
-            'american poetry landscape', 'increasingly dominated',
-            'instagramable verse', 'present-day politics',
-            'erotically charged', 'philosophical meditations',
-            'refreshing return', 'lyric poetry', 'four way books',
-            'sixth book of poetry', 'draws from three decades',
-            'covers a range of themes', 'most compelling when writing',
-            'intersection of myth', 'human body', 'opening poem',
-            'collection', 'drawing from the wells', 'storytelling and science'
-        ]
-        
-        for line in lines:
-            line_lower = line.lower()
-            if any(pattern in line_lower for pattern in problematic_patterns):
-                return False, f"Content contains essay/review pattern: {line[:50]}..."
-        
-        # ENHANCED: Check if content starts like an essay
-        first_few_lines = ' '.join(lines[:3]).lower()
-        essay_starters = [
-            'if i were to choose', 'in an american poetry', 'what begins as',
-            'the speaker', 'this might seem', 'in our moment',
-            'to practice lightness', 'poets practice', 'take simile',
-            'in fiction', 'in poetry', 'as wordsworth writes',
-            'at first', 'while simile', 'in my mind'
-        ]
-        
-        for starter in essay_starters:
-            if starter in first_few_lines:
-                return False, f"Content starts like an essay: '{starter}'"
-        
-        # Additional check: if all lines look like titles (title case, short)
-        title_like_lines = 0
-        for line in lines:
-            # Check if line looks like a title (mostly title case, reasonable length)
-            words = line.split()
-            if len(words) >= 2 and len(words) <= 8:  # Typical title length
-                capitalized_words = sum(1 for word in words if word[0].isupper() and len(word) > 2)
-                if capitalized_words >= len(words) * 0.7:  # Most words capitalized
-                    title_like_lines += 1
-        
-        if title_like_lines >= len(lines) * 0.8:  # 80% of lines look like titles
-            return False, "Content appears to be a list of titles, not actual poetry"
-        
-        # ENHANCED: Check for biographical/publication information
-        bio_indicators = [
-            'first book', 'second book', 'latest book', 'published in', 'appears in',
-            'winner of', 'recipient of', 'teaches at', 'professor at', 'lives in',
-            'born in', 'graduated from', 'mfa', 'phd', 'university', 'college',
-            'press', 'publisher', 'publication', 'review', 'magazine', 'journal',
-            'holds degrees', 'boston university', 'new and selected poems',
-            'building the perfect animal', 'four way books', 'sixth book'
-        ]
-        
-        bio_count = sum(1 for indicator in bio_indicators if indicator in text_lower)
-        if bio_count >= 2:  # Reduced from 3
-            return False, f"Content appears to be biographical/publication information, not actual poetry (bio indicators: {bio_count})"
-        
-        # Check if content looks like a book/publication description
-        publication_phrases = [
-            'first book', 'latest collection', 'new book', 'forthcoming',
-            'new and selected', 'building the perfect', 'four way books',
-            'copper canyon press', 'sixth book of poetry'
-        ]
-        
-        for phrase in publication_phrases:
-            if phrase in text_lower:
-                return False, f"Content appears to be publication information: '{phrase}'"
-        
-        # ENHANCED: Check for reasonable title and author
-        if len(title) > 100:
-            return False, "Title too long (likely extracted wrong content)"
-        
-        author = poem_data['author'].strip()
-        if author.lower() in ['unknown', 'anonymous', ''] and 'ai generated' not in poem_data['source'].lower():
-            return False, "Missing author information"
-        
-        # ENHANCED: Check if content is too long to be a typical poem excerpt
-        if len(text) > 2000:  # Most poems are shorter than this
-            return False, "Content too long (likely essay or review, not poem)"
-        
-        # If URL provided, validate it exists and is accessible
-        if url:
-            try:
-                headers = {'User-Agent': 'Mozilla/5.0 (compatible; PoetryBot/1.0)'}
-                response = requests.head(url, headers=headers, timeout=10, allow_redirects=True)
-                if response.status_code >= 400:
-                    return False, f"URL not accessible: {response.status_code}"
-            except Exception as e:
-                return False, f"URL validation failed: {e}"
-        
-        return True, "Poem content validated successfully"
-
-    def validate_tweet_content(self, tweet_text, poem_data, url=None):
-        """Validate that tweet content is appropriate and complete"""
-        if not tweet_text or len(tweet_text.strip()) < 20:
-            return False, "Tweet text too short"
-        
-        if len(tweet_text) > 280:
-            return False, "Tweet text too long for Twitter"
-        
-        # Ensure tweet contains actual poem content (more flexible check)
-        poem_text = poem_data['text'].lower()
-        tweet_lower = tweet_text.lower()
-        
-        # Check if any significant words from poem appear in tweet
-        poem_words = [word.strip('.,!?;:"()[]') for word in poem_text.split() if len(word) > 3]
-        significant_words = [word for word in poem_words if word not in ['the', 'and', 'but', 'for', 'with', 'from', 'that', 'this', 'they', 'have', 'been', 'were', 'said']]
-        
-        if significant_words:
-            # Check ALL significant words, not just the first 5
-            poem_content_found = any(word in tweet_lower for word in significant_words)
-            if not poem_content_found:
-                return False, "Tweet doesn't contain poem content"
-        
-        # If URL included, make sure it's valid
-        if url and url in tweet_text:
-            try:
-                headers = {'User-Agent': 'Mozilla/5.0 (compatible; PoetryBot/1.0)'}
-                response = requests.head(url, headers=headers, timeout=5)
-                if response.status_code >= 400:
-                    return False, f"Tweet contains broken URL: {response.status_code}"
-            except:
-                return False, "Tweet contains invalid URL"
-        
-        return True, "Tweet content validated successfully"
-
-    def generate_ai_poem(self):
-        """AI generation is DISABLED - only real poems from literary sources allowed"""
-        print("🚫 AI poem generation is permanently disabled")
-        print("📚 Only posting real poems from literary journals and magazines")
-        return None
-
-    def format_tweet_text(self, poem):
-        """Format poem in exact format: "lines" - Author Name \n\n Read more: URL \n\n #WritingCommunity #PoetryCommunity"""
-        # Extract up to 4 striking lines from the poem
-        striking_lines = self.select_striking_lines(poem['text'])
-        
-        # Build the tweet components
-        author = poem['author'][:50]  # Limit author length
-        poem_url = poem.get('url', '')
-        
-        # Format exactly as requested:
-        # "lines from the poem: at most 4 lines"
-        # - Name of the author
-        # 
-        # Read more: Link to the poem
-        # 
-        # #WritingCommunity #PoetryCommunity
-        
-        # Put lines in quotes
-        quoted_lines = f'"{striking_lines}"'
-        
-        # Author attribution
-        attribution = f"- {author}"
-        
-        # Read more link (if available)
-        if poem_url:
-            read_more = f"Read more: {poem_url}"
-        else:
-            read_more = f"Source: {poem.get('source', 'Literary Journal')}"
-        
-        # Hashtags
-        hashtags = "#WritingCommunity #PoetryCommunity"
-        
-        # Combine all parts with proper spacing
-        tweet_text = f"{quoted_lines}\n{attribution}\n\n{read_more}\n\n{hashtags}"
-        
-        # Final length check - prioritize the poem content
-        if len(tweet_text) > 280:
-            # Try shorter lines if too long
-            lines = striking_lines.split('\n')
-            if len(lines) > 2:
-                # Reduce to 2 lines if we have more
-                shorter_lines = '\n'.join(lines[:2])
-                quoted_lines = f'"{shorter_lines}"'
-                tweet_text = f"{quoted_lines}\n{attribution}\n\n{read_more}\n\n{hashtags}"
-                
-                if len(tweet_text) > 280:
-                    # Try just 1 line
-                    single_line = lines[0]
-                    quoted_lines = f'"{single_line}"'
-                    tweet_text = f"{quoted_lines}\n{attribution}\n\n{read_more}\n\n{hashtags}"
-        
-        return tweet_text[:280]  # Final safety truncation
-
-    def post_to_twitter(self, poem):
-        """Post poem to Twitter using API v2 with validation (text only)"""
-        if not hasattr(self, 'twitter_client') or not self.twitter_client:
-            print("❌ Twitter API v2 not available")
-            return False
-            
-        try:
-            # Format the tweet
-            tweet_text = self.format_tweet_text(poem)
-            poem_url = poem.get('url')  # URL where poem was found
-            
-            # Validate tweet content before posting
-            is_valid, message = self.validate_tweet_content(tweet_text, poem, poem_url)
-            if not is_valid:
-                print(f"❌ Tweet validation failed: {message}")
-                return False
-            
-            print(f"📝 Tweet preview ({len(tweet_text)} chars):")
-            print("-" * 50)
-            print(tweet_text)
-            print("-" * 50)
-            
-            # Post using Twitter API v2 (text only)
-            response = self.twitter_client.create_tweet(text=tweet_text)
-            
-            if response.data:
-                tweet_id = response.data['id']
-                print(f"✅ Posted to Twitter (text only): {tweet_id}")
-                return True
-            else:
-                print("❌ Tweet creation failed - no response data")
-                return False
-            
-        except Exception as e:
-            print(f"❌ Twitter posting failed: {e}")
-            return False
-
-    def run(self):
-        """Main bot execution - Now Twitter Focused and Text Only"""
-        print("🤖 Poetry Bot (Twitter Focused, Text Only) starting...")
-        
-        # Check if we need to reset daily tracking
-        self.check_daily_reset()
-        
-        # Determine which post of the day this is
-        post_number = self.get_post_number_today()
-        total_posts = BOT_SETTINGS.get('posts_per_day', 2)
-        
-        print(f"📊 Starting Twitter post {post_number} of {total_posts} for today")
-        print(f"🎲 Using random selection from {len(get_weighted_journal_list())} curated sources")
-        print("🎯 Equal opportunity for all poets!")
-        
-        # Try to fetch a poem from curated literary journals (random selection)
-        poem = self.fetch_poem_from_journals()
-        
-        # NEVER USE AI GENERATION - Only real poems from literary journals
-        if not poem:
-            print("❌ Failed to get any valid poem from literary journals")
-            print("🚫 NEVER posting AI-generated content - only real poems from literary sources")
-            return False
-            
-        print(f"📝 Selected poem: '{poem['title']}' by {poem['author']}")
-        print(f"📍 Source: {poem['source']}")
-        if poem.get('url'):
-            print(f"🔗 URL: {poem['url']}")
-        
-        # Show selected lines
-        striking_lines = self.select_striking_lines(poem['text'])
-        print(f"✨ Selected lines: {striking_lines}")
-        
-        # Add to daily tracking
-        self.daily_posts['poems_posted'].append({
-            'title': poem['title'],
-            'author': poem['author'],
-            'source': poem['source'],
-            'timestamp': datetime.now().isoformat(),
-            'post_number': post_number
-        })
-        
-        # Post to Twitter (text only)
-        print("🐦 Posting excerpt to Twitter (text only)...")
-        success = self.post_to_twitter(poem)
-            
-        # Print daily summary
-        self.print_daily_summary()
-            
-        if success:
-            print(f"🎉 Twitter Poetry bot completed successfully! (Post {post_number}/{total_posts})")
-            print(f"✨ Posted excerpt from '{poem['title']}' by {poem['author']} from {poem['source']}")
-        else:
-            print("❌ Twitter Poetry bot encountered errors during posting")
-            
-        return success
-
-    def print_daily_summary(self):
-        """Print summary of today's posting activity (Twitter Focused)"""
-        post_count = len(self.daily_posts['poems_posted'])
-        target_posts = BOT_SETTINGS.get('posts_per_day', 2)
-        
-        print(f"\n📈 Daily Twitter Summary ({self.daily_posts['date']}):")
-        print(f"   Posts completed: {post_count}/{target_posts}")
-        print(f"   Sources used: {', '.join(set(self.daily_posts['sources']))}")
-        authors_list = list(set(self.daily_posts['authors']))
-        print(f"   Authors featured: {', '.join(authors_list[:3])}{'...' if len(authors_list) > 3 else ''}")
-        print(f"   AI generations: {self.daily_posts['ai_posts_count']}/{BOT_SETTINGS.get('max_ai_posts_per_day', 1)}")
-        print(f"   🎲 Selection method: Random (equal opportunity)")
-        print(f"   📝 Format: Poetry excerpts with links (text only)")
-        
-        remaining_posts = target_posts - post_count
-        if remaining_posts > 0:
-            next_times = BOT_SETTINGS.get('post_times_utc', ['09:00', '21:00'])
-            if post_count < len(next_times):
-                print(f"   Next post scheduled: {next_times[post_count]} UTC")
-        else:
-            print("   ✅ All posts completed for today!")
-        print()
-
-if __name__ == "__main__":
-    bot = PoetryBot()
-    bot.run()
+            return False, f"URL validation failed: {e}"
+    
+    # Basic length checks
+    if len(text) < 30:
+        return False, "Poem text too short (likely incomplete)"
+    
+    if len(text) > 3000:
+        return False, "Content too long (likely essay, not poem)"
+    
+    # ENHANCED: Structure analysis for poetry vs prose
+    lines = [line.strip() for line in text.split('\n') if line.strip()]
+    if len(lines) < 2:
+        return False, "Insufficient poem content (needs multiple lines)"
+    
+    # Check average line length (prose has much longer lines)
+    avg_line_length = sum(len(line) for line in lines) / len(lines) if lines else 0
+    long_lines = sum(1 for line in lines if len(line) > 120)
+    very_long_lines = sum(1 for line in lines if len(line) > 200)
+    
+    # If most lines are very long, it's likely prose
+    if avg_line_length > 100 and long_lines > len(lines) * 0.6:
+        return False, "Content appears to be prose, not poetry (very long lines)"
+    
+    if very_long_lines > len(lines) * 0.3:
+        return False, "Content contains prose paragraphs, not poetry lines"
+    
+    # ENHANCED: Essay/review detection (much more comprehensive)
+    text_lower = text.lower()
+    title_lower = title.lower()
+    
+    # Strong essay indicators
+    essay_patterns = [
+        'in this essay', 'the author argues', 'according to', 'furthermore',
+        'in conclusion', 'to summarize', 'for example', 'such as',
+        'the collection', 'the poet writes', 'as mentioned earlier',
+        'drawing on', 'in fiction', 'in poetry', 'the speaker',
+        'voice is', 'equally accessible', 'compelling', 'transformation needs',
+        'slow build-up', 'can be transformative', 'leaves us with',
+        'american poetry landscape', 'increasingly dominated',
+        'instagramable verse', 'present-day politics',
+        'refreshing return', 'lyric poetry', 'opening poem',
+        'intersection of myth', 'human body', 'covers a range of themes',
+        'most compelling when writing', 'drawing from the wells',
+        'storytelling and science', 'guided me while writing',
+        'full-length poetry collection', 'chronicle of drifting'
+    ]
+    
+    essay_count = sum(1 for pattern in essay_patterns if pattern in text_lower)
+    if essay_count >= 2:  # Lowered threshold for stricter validation
+        return False, f"Content appears to be essay/review about poetry ({essay_count} essay patterns found)"
+    
+    # ENHANCED: Title analysis for non-poetry content
+    problematic_titles = [
+        'review of', 'essay', 'interview', 'conversation with', 'profile',
+        'announcement', 'winner', 'prize', 'award', 'selected poems',
+        'new and selected', 'biography', 'memoir', 'critical essay',
+        'marie howe', 'ruth lilly', 'building the perfect',
+        'poetry and lightness', 'lightness', 'six memos',
+        'calvino', 'italo calvino', 'craft essay', 'poetics'
+    ]
+    
+    for indicator in problematic_titles:
+        if indicator in title_lower:
+            return False, f"Title indicates non-poem content: '{indicator}' in '{title}'"
+    
+    # ENHANCED: Navigation/metadata detection
+    nav_patterns = [
+        'table of contents', 'contents', 'browse', 'archive', 'search results',
+        'subscription', 'newsletter', 'featured', 'latest', 'recent',
+        'shortlist', 'issue', 'volume', 'submissions', 'contest',
+        'author index', 'title index', 'editorial board',
+        'macarthur', 'national book award', 'poet laureate', 'pulitzer prize'
+    ]
+    
+    nav_count = sum(1 for pattern in nav_patterns if pattern in text_lower)
+    if nav_count >= 2:
+        return False, "Content appears to be navigation/metadata, not actual poetry"
+    
+    # ENHANCED: Biographical content detection
+    bio_patterns = [
+        'first book', 'second book', 'latest book', 'published in', 'appears in',
+        'winner of', 'recipient of', 'teaches at', 'professor at', 'lives in',
+        'born in', 'graduated from', 'mfa', 'phd', 'university', 'college',
+        'press', 'publisher', 'publication', 'four way books', 'copper canyon'
+    ]
+    
+    bio_count = sum(1 for pattern in bio_patterns if pattern in text_lower)
+    if bio_count >= 3:
+        return False, f"Content appears to be biographical information ({bio_count} bio indicators)"
+    
+    # ENHANCED: Check for error pages
+    error_patterns = [
+        'page not found', '404', 'error', 'access denied',
+        'subscription required', 'login required', 'not available',
+        'coming soon', 'under construction', 'temporarily unavailable'
+    ]
+    
+    for pattern in error_patterns:
+        if pattern in text_lower:
+            return False, f"Content contains error pattern: {pattern}"
+    
+    # ENHANCED: Publication/book description detection
+    publication_phrases = [
+        'first book', 'latest collection', 'new book', 'forthcoming',
+        'new and selected', 'building the perfect', 'four way books',
+        'copper canyon press', 'sixth book of poetry', 'chronicle of drifting'
+    ]
+    
+    for phrase in publication_phrases:
+        if phrase in text_lower:
+            return False, f"Content appears to be publication description: '{phrase}'"
+    
+    # ENHANCED: Check for reasonable title and author
+    if len(title) > 100:
+        return False, "Title too long (likely extracted wrong content)"
+    
+    author = poem_data['author'].strip()
+    if author.lower() in ['unknown', 'anonymous', ''] and 'ai generated' not in poem_data['source'].lower():
+        return False, "Missing author information"
+    
+    # ENHANCED: Word count validation (more specific ranges)
+    word_count = len(text.split())
+    if word_count < 20:
+        return False, f"Too short ({word_count} words) - likely incomplete"
+    elif word_count > 800:
+        return False, f"Too long ({word_count} words) - likely essay or multiple poems"
+    
+    return True, "Poem content validated successfully"
