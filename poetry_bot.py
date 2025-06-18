@@ -438,9 +438,9 @@ class TwitterPoetryBot(PoetryBot):
         
         # Truncate poem if needed
         if len(poem['text']) > max_poem_length:
-        poem_text = poem['text'][:max_poem_length].rstrip() + "..."
+            poem_text = poem['text'][:max_poem_length].rstrip() + "..."
         else:
-        poem_text = poem['text']
+            poem_text = poem['text']
         
         # Construct final tweet
         tweet_text = f"{tweet_start}{poem_text}{tweet_end}"
@@ -452,45 +452,45 @@ class TwitterPoetryBot(PoetryBot):
         
         # LIVE TWITTER POSTING
         try:
-        import tweepy
-        import os
-        
-        # Get Twitter API credentials from environment
-        api_key = os.getenv('TWITTER_API_KEY')
-        api_secret = os.getenv('TWITTER_API_SECRET')
-        access_token = os.getenv('TWITTER_ACCESS_TOKEN')
-        access_token_secret = os.getenv('TWITTER_ACCESS_TOKEN_SECRET')
-        
-        if not all([api_key, api_secret, access_token, access_token_secret]):
-            print("❌ Missing Twitter API credentials in environment variables")
-            return False
-        
-        # Authenticate with Twitter
-        auth = tweepy.OAuthHandler(api_key, api_secret)
-        auth.set_access_token(access_token, access_token_secret)
-        api = tweepy.API(auth)
-        
-        # Verify authentication
-        try:
-            api.verify_credentials()
-            print("✅ Twitter authentication successful")
-        except:
-            print("❌ Twitter authentication failed")
-            return False
-        
-        # Post the tweet
-        response = api.update_status(tweet_text)
-        print(f"🎉 SUCCESS! Posted to Twitter: https://twitter.com/user/status/{response.id}")
-        return True
-        
+            import tweepy
+            import os
+            
+            # Get Twitter API credentials from environment
+            api_key = os.getenv('TWITTER_API_KEY')
+            api_secret = os.getenv('TWITTER_API_SECRET')
+            access_token = os.getenv('TWITTER_ACCESS_TOKEN')
+            access_token_secret = os.getenv('TWITTER_ACCESS_TOKEN_SECRET')
+            
+            if not all([api_key, api_secret, access_token, access_token_secret]):
+                print("❌ Missing Twitter API credentials in environment variables")
+                return False
+            
+            # Authenticate with Twitter
+            auth = tweepy.OAuthHandler(api_key, api_secret)
+            auth.set_access_token(access_token, access_token_secret)
+            api = tweepy.API(auth)
+            
+            # Verify authentication
+            try:
+                api.verify_credentials()
+                print("✅ Twitter authentication successful")
+            except:
+                print("❌ Twitter authentication failed")
+                return False
+            
+            # Post the tweet
+            response = api.update_status(tweet_text)
+            print(f"🎉 SUCCESS! Posted to Twitter: https://twitter.com/user/status/{response.id}")
+            return True
+            
         except ImportError:
-        print("❌ tweepy library not installed")
-        return False
+            print("❌ tweepy library not installed")
+            return False
         except Exception as e:
-        print(f"❌ Error posting to Twitter: {str(e)}")
-        return False
-        
-        def run(self):
+            print(f"❌ Error posting to Twitter: {str(e)}")
+            return False
+    
+    def run(self):
         """Twitter bot execution"""
         poem = self.get_daily_poem()
         if poem:
