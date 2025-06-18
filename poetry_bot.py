@@ -2,6 +2,7 @@
 """
 Complete Poetry Bot with Integrated Discovery System
 Finds and extracts high-quality poems from 120+ sources
+Twitter API v2 Compatible for Free Tier
 """
 
 import requests
@@ -51,7 +52,7 @@ class PoetryBot:
         text = poem_data['text'].strip()
         title = poem_data['title'].strip()
         
-        # ENHANCED: URL accessibility check
+        # URL accessibility check
         if url:
             try:
                 headers = {'User-Agent': 'Mozilla/5.0 (compatible; PoetryBot/1.0)'}
@@ -68,7 +69,7 @@ class PoetryBot:
         if len(text) > 3000:
             return False, "Content too long (likely essay, not poem)"
         
-        # ENHANCED: Structure analysis for poetry vs prose
+        # Structure analysis for poetry vs prose
         lines = [line.strip() for line in text.split('\n') if line.strip()]
         if len(lines) < 2:
             return False, "Insufficient poem content (needs multiple lines)"
@@ -85,7 +86,7 @@ class PoetryBot:
         if very_long_lines > len(lines) * 0.3:
             return False, "Content contains prose paragraphs, not poetry lines"
         
-        # ENHANCED: Essay/review detection (much more comprehensive)
+        # Essay/review detection
         text_lower = text.lower()
         title_lower = title.lower()
         
@@ -107,10 +108,10 @@ class PoetryBot:
         ]
         
         essay_count = sum(1 for pattern in essay_patterns if pattern in text_lower)
-        if essay_count >= 2:  # Lowered threshold for stricter validation
+        if essay_count >= 2:
             return False, f"Content appears to be essay/review about poetry ({essay_count} essay patterns found)"
         
-        # ENHANCED: Title analysis for non-poetry content
+        # Title analysis for non-poetry content
         problematic_titles = [
             'review of', 'essay', 'interview', 'conversation with', 'profile',
             'announcement', 'winner', 'prize', 'award', 'selected poems',
@@ -124,7 +125,7 @@ class PoetryBot:
             if indicator in title_lower:
                 return False, f"Title indicates non-poem content: '{indicator}' in '{title}'"
         
-        # ENHANCED: Navigation/metadata detection
+        # Navigation/metadata detection
         nav_patterns = [
             'table of contents', 'contents', 'browse', 'archive', 'search results',
             'subscription', 'newsletter', 'featured', 'latest', 'recent',
@@ -137,7 +138,7 @@ class PoetryBot:
         if nav_count >= 2:
             return False, "Content appears to be navigation/metadata, not actual poetry"
         
-        # ENHANCED: Biographical content detection
+        # Biographical content detection
         bio_patterns = [
             'first book', 'second book', 'latest book', 'published in', 'appears in',
             'winner of', 'recipient of', 'teaches at', 'professor at', 'lives in',
@@ -149,7 +150,7 @@ class PoetryBot:
         if bio_count >= 3:
             return False, f"Content appears to be biographical information ({bio_count} bio indicators)"
         
-        # ENHANCED: Check for error pages
+        # Check for error pages
         error_patterns = [
             'page not found', '404', 'error', 'access denied',
             'subscription required', 'login required', 'not available',
@@ -160,7 +161,7 @@ class PoetryBot:
             if pattern in text_lower:
                 return False, f"Content contains error pattern: {pattern}"
         
-        # ENHANCED: Publication/book description detection
+        # Publication/book description detection
         publication_phrases = [
             'first book', 'latest collection', 'new book', 'forthcoming',
             'new and selected', 'building the perfect', 'four way books',
@@ -171,7 +172,7 @@ class PoetryBot:
             if phrase in text_lower:
                 return False, f"Content appears to be publication description: '{phrase}'"
         
-        # ENHANCED: Check for reasonable title and author
+        # Check for reasonable title and author
         if len(title) > 100:
             return False, "Title too long (likely extracted wrong content)"
         
@@ -179,7 +180,7 @@ class PoetryBot:
         if author.lower() in ['unknown', 'anonymous', ''] and 'ai generated' not in poem_data['source'].lower():
             return False, "Missing author information"
         
-        # ENHANCED: Word count validation (more specific ranges)
+        # Word count validation
         word_count = len(text.split())
         if word_count < 20:
             return False, f"Too short ({word_count} words) - likely incomplete"
@@ -416,12 +417,12 @@ class PoetryBot:
             print(f"❌ Bot execution failed: {e}")
             return None
 
-# Legacy support for Twitter bot
+
 class TwitterPoetryBot(PoetryBot):
-    """Twitter-specific poetry bot (extends main bot)"""
+    """Twitter-specific poetry bot with API v2 support for free tier"""
     
     def post_poem(self, poem):
-        """Post poem to Twitter with elegant formatting - LIVE POSTING"""
+        """Post poem to Twitter using API v2 - FREE TIER COMPATIBLE"""
         if not poem:
             return False
         
@@ -445,12 +446,12 @@ class TwitterPoetryBot(PoetryBot):
         # Construct final tweet
         tweet_text = f"{tweet_start}{poem_text}{tweet_end}"
         
-        print(f"📱 Posting to Twitter LIVE ({len(tweet_text)} chars):")
+        print(f"📱 Posting to Twitter with API v2 ({len(tweet_text)} chars):")
         print("-" * 50)
         print(tweet_text)
         print("-" * 50)
         
-        # LIVE TWITTER POSTING
+        # LIVE TWITTER POSTING with API v2
         try:
             import tweepy
             import os
@@ -460,27 +461,35 @@ class TwitterPoetryBot(PoetryBot):
             api_secret = os.getenv('TWITTER_API_SECRET')
             access_token = os.getenv('TWITTER_ACCESS_TOKEN')
             access_token_secret = os.getenv('TWITTER_ACCESS_TOKEN_SECRET')
+            bearer_token = os.getenv('TWITTER_BEARER_TOKEN')  # Optional
             
             if not all([api_key, api_secret, access_token, access_token_secret]):
                 print("❌ Missing Twitter API credentials in environment variables")
                 return False
             
-            # Authenticate with Twitter
-            auth = tweepy.OAuthHandler(api_key, api_secret)
-            auth.set_access_token(access_token, access_token_secret)
-            api = tweepy.API(auth)
+            # Use Twitter API v2 Client (compatible with free tier)
+            client = tweepy.Client(
+                consumer_key=api_key,
+                consumer_secret=api_secret,
+                access_token=access_token,
+                access_token_secret=access_token_secret,
+                bearer_token=bearer_token,
+                wait_on_rate_limit=True
+            )
             
-            # Verify authentication
+            # Verify authentication with API v2
             try:
-                api.verify_credentials()
-                print("✅ Twitter authentication successful")
-            except:
-                print("❌ Twitter authentication failed")
+                me = client.get_me()
+                print(f"✅ Twitter API v2 authentication successful - @{me.data.username}")
+            except Exception as auth_error:
+                print(f"❌ Twitter authentication failed: {auth_error}")
                 return False
             
-            # Post the tweet
-            response = api.update_status(tweet_text)
-            print(f"🎉 SUCCESS! Posted to Twitter: https://twitter.com/user/status/{response.id}")
+            # Post the tweet using API v2
+            response = client.create_tweet(text=tweet_text)
+            tweet_id = response.data['id']
+            username = me.data.username
+            print(f"🎉 SUCCESS! Posted to Twitter: https://twitter.com/{username}/status/{tweet_id}")
             return True
             
         except ImportError:
@@ -497,6 +506,7 @@ class TwitterPoetryBot(PoetryBot):
             self.post_poem(poem)
             return poem
         return None
+
 
 if __name__ == "__main__":
     print("🤖 Poetry Bot Starting...")
