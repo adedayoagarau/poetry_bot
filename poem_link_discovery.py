@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Poem Link Discovery System
-Discovers actual poem URLs from poetry websites by analyzing link patterns
+Enhanced Poem Link Discovery and Validation System
+Improved accuracy for detecting actual poems vs other content
 """
 
 import requests
@@ -9,485 +9,323 @@ from bs4 import BeautifulSoup
 import re
 from urllib.parse import urljoin, urlparse
 import time
-from typing import List, Dict, Set
+from typing import List, Dict, Set, Tuple, Optional
 import json
+from dataclasses import dataclass
+import logging
 
-# Site-specific configurations for poem link discovery
-SITE_CONFIGS = {
-    'poems.com': {
-        'name': 'Poetry Daily',
-        'base_urls': [
-            'https://poems.com/',
-            'https://poems.com/archive/',
-            'https://poems.com/poems/'
-        ],
-        'poem_patterns': [
-            r'^/poem/[^/]+/$',  # Individual poem pages only
-            r'^/todays-poem/?$'  # Today's poem only
-        ],
-        'css_selectors': [
-            'a[href*="/poem/"]'
-        ],
-        'exclude_patterns': [
-            r'/about',
-            r'/contact',
-            r'/subscribe',
-            r'/newsletter',
-            r'/search',
-            r'/browse',
-            r'/submit',
-            r'/features',
-            r'/archives',
-            r'/what-sparks-poetry',
-            r'/news',
-            r'/support'
-        ]
-    },
-    'versedaily.org': {
-        'name': 'Verse Daily',
-        'base_urls': [
-            'https://www.versedaily.org/',
-            'https://www.versedaily.org/archive.html'
-        ],
-        'poem_patterns': [
-            r'^/\d{4}/.*\.html$',
-            r'^/poems/.*\.html$'
-        ],
-        'css_selectors': [
-            'a[href$=".html"]',
-            'div.archive a'
-        ],
-        'exclude_patterns': [
-            r'/about',
-            r'/contact',
-            r'/submit',
-            r'/index'
-        ]
-    },
-    'poetryfoundation.org': {
-        'name': 'Poetry Foundation',
-        'base_urls': [
-            'https://www.poetryfoundation.org/poems/browse',
-            'https://www.poetryfoundation.org/poems'
-        ],
-        'poem_patterns': [
-            r'^/poems/\d+/[^/]+$',  # Individual poem pages with ID and title
-            r'^/poetrymagazine/poems/\d+/[^/]+$'  # Poetry Magazine poems
-        ],
-        'css_selectors': [
-            'a[href*="/poems/"][href*="/"]',
-            'a[href*="/poetrymagazine/poems/"]'
-        ],
-        'exclude_patterns': [
-            r'/poets',
-            r'/articles',
-            r'/browse',
-            r'/search',
-            r'/about',
-            r'/guides',
-            r'/poem-of-the-day',
-            r'/programs'
-        ]
-    },
-    'poetrymagazine.org': {
-        'name': 'Poetry Magazine',
-        'base_urls': [
-            'https://www.poetrymagazine.org/',
-            'https://www.poetrymagazine.org/poems'
-        ],
-        'poem_patterns': [
-            r'^/poems/.*$',
-            r'^/poem/.*$'
-        ],
-        'css_selectors': [
-            'a[href*="/poems/"]',
-            'div.poem-listing a'
-        ],
-        'exclude_patterns': [
-            r'/articles',
-            r'/reviews',
-            r'/about',
-            r'/subscribe'
-        ]
-    },
-    'rattle.com': {
-        'name': 'Rattle Magazine',
-        'base_urls': [
-            'https://rattle.com/poetry/',
-            'https://rattle.com/category/poetry/'
-        ],
-        'poem_patterns': [
-            r'^/poetry/.*$',
-            r'^/\d{4}/\d{2}/.*$'
-        ],
-        'css_selectors': [
-            'a[href*="/poetry/"]',
-            'article a'
-        ],
-        'exclude_patterns': [
-            r'/about',
-            r'/submit',
-            r'/subscribe',
-            r'/category'
-        ]
-    },
-    'theadroitjournal.org': {
-        'name': 'The Adroit Journal',
-        'base_urls': [
-            'https://theadroitjournal.org/',
-            'https://theadroitjournal.org/category/poetry/'
-        ],
-        'poem_patterns': [
-            r'^/\d{4}/\d{2}/\d{2}/[^/]*poem[^/]*/$',  # Only URLs with "poem" in the path
-            r'^/poetry/.*$'
-        ],
-        'css_selectors': [
-            'a[href*="/poetry/"]'
-        ],
-        'exclude_patterns': [
-            r'/about',
-            r'/submit',
-            r'/category',
-            r'/review',
-            r'/interview',
-            r'/essay',
-            r'/critical-essays',
-            r'/conversation',
-            r'/profile',
-            r'/announcement',
-            r'review-of',
-            r'conversation-with',
-            r'interview-with',
-            r'critical-essays',
-            r'marie-howe',
-            r'ruth-lilly',
-            r'poetry-prize',
-            r'building-the-perfect',
-            r'new-and-selected',
-            r'poetry-and-lightness',
-            r'lightness',
-            r'wins',
-            r'winner',
-            r'prize',
-            r'award',
-            r'selected-poems'
-        ]
-    },
-    'www.poetrynw.org': { 
-        'name': 'Poetry Northwest',
-        'base_urls': [
-            'https://www.poetrynw.org/' 
-        ],
-        'poem_patterns': [
-            r'/poems/.*/$' # Placeholder - needs review
-        ],
-        'css_selectors': [
-            'a[href*="/poems/"]' # Placeholder - needs review
-        ],
-        'exclude_patterns': [
-            r'/about',
-            r'/submit'
-        ]
-    },
-    'barrenmagazine.com': {
-        'name': 'Barren Magazine',
-        'base_urls': ['https://barrenmagazine.com/'], 
-        'poem_patterns': [r'/[^/]+/[^/]+/?$'], # Placeholder - needs review, very generic
-        'css_selectors': ['article a'], # Placeholder - needs review
-        'exclude_patterns': [r'/about', r'/submissions']
-    },
-    'greensbororeview.org': {
-        'name': 'Greensboro Review',
-        'base_urls': ['https://greensbororeview.org/'], 
-        'poem_patterns': [r'/issue-\d+/.*html$'], # Placeholder - needs review
-        'css_selectors': ['a[href*=".html"]'], # Placeholder - needs review
-        'exclude_patterns': [r'/about', r'/contests']
-    }
-}
+@dataclass
+class ValidationResult:
+    """Result of poem validation with detailed scoring"""
+    is_poem: bool
+    confidence_score: float
+    reasons: List[str]
+    content_length: int
+    has_line_breaks: bool
+    has_stanzas: bool
 
-def get_poem_links(base_url: str, site_config: Dict) -> List[str]:
-    """
-    Discover actual poem URLs from a poetry website
+class EnhancedPoemValidator:
+    """Enhanced validation for poem content"""
     
-    Args:
-        base_url: The base URL to start discovery from
-        site_config: Configuration dict with patterns and selectors
-        
-    Returns:
-        List of discovered poem URLs
-    """
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (compatible; PoetryBot/1.0; +https://github.com/poetrybot)',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.5',
-        'Accept-Encoding': 'gzip, deflate',
-        'Connection': 'keep-alive',
-        'Upgrade-Insecure-Requests': '1'
-    }
+    def __init__(self):
+        self.session = requests.Session()
+        self.session.headers.update({
+            'User-Agent': 'Mozilla/5.0 (compatible; PoetryBot/1.0; +https://github.com/poetrybot)',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.5',
+            'Connection': 'keep-alive'
+        })
     
-    discovered_links = set()
-    
-    try:
-        print(f"🔍 Discovering poem links from {base_url}")
-        
-        # Fetch the page
-        response = requests.get(base_url, headers=headers, timeout=15)
-        if response.status_code != 200:
-            print(f"❌ HTTP {response.status_code} for {base_url}")
-            return []
-        
-        soup = BeautifulSoup(response.content, 'html.parser')
-        
-        # Method 1: Use CSS selectors if provided
-        if 'css_selectors' in site_config:
-            for selector in site_config['css_selectors']:
-                try:
-                    links = soup.select(selector)
-                    for link in links:
-                        href = link.get('href')
-                        if href:
-                            # Convert relative URLs to absolute
-                            absolute_url = urljoin(base_url, href)
-                            discovered_links.add(absolute_url)
-                            print(f"  📎 CSS selector found: {absolute_url}")
-                except Exception as e:
-                    print(f"⚠️  CSS selector '{selector}' failed: {e}")
-        
-        # Method 2: Pattern matching on all links
-        all_links = soup.find_all('a', href=True)
-        
-        for link in all_links:
-            href = link.get('href', '')
-            
-            # Skip empty hrefs
-            if not href:
-                continue
-            
-            # Convert to absolute URL
-            absolute_url = urljoin(base_url, href)
-            parsed_url = urlparse(absolute_url)
-            
-            # Check if URL matches poem patterns
-            if 'poem_patterns' in site_config:
-                for pattern in site_config['poem_patterns']:
-                    if re.match(pattern, parsed_url.path):
-                        # Check if it should be excluded
-                        should_exclude = False
-                        if 'exclude_patterns' in site_config:
-                            for exclude_pattern in site_config['exclude_patterns']:
-                                if re.search(exclude_pattern, parsed_url.path):
-                                    should_exclude = True
-                                    break
-                        
-                        if not should_exclude:
-                            discovered_links.add(absolute_url)
-                            print(f"  📝 Pattern match found: {absolute_url}")
-                            break
-        
-        # Method 3: Look for common poem indicators in link text (ENHANCED)
-        poem_text_indicators = [
-            'poem', 'poetry', 'verse', 'sonnet', 'haiku', 'ballad',
-            'elegy', 'ode', 'limerick', 'free verse'
-        ]
-        
-        # ENHANCED: Exclude terms that indicate non-poem content
-        exclude_text_indicators = [
-            'review', 'essay', 'interview', 'conversation', 'profile',
-            'announcement', 'news', 'winner', 'prize', 'award', 'wins',
-            'selected poems', 'new and selected', 'building the perfect',
-            'lightness', 'marie howe', 'ruth lilly', 'critical essay',
-            'about', 'biography', 'memoir', 'craft essay', 'poetics'
-        ]
-        
-        for link in all_links:
-            href = link.get('href', '')
-            link_text = link.get_text().lower().strip()
-            
-            # Check if link text contains poem indicators
-            has_poem_indicator = any(indicator in link_text for indicator in poem_text_indicators)
-            
-            # Check if link text contains exclusion indicators
-            has_exclude_indicator = any(indicator in link_text for indicator in exclude_text_indicators)
-            
-            if href and has_poem_indicator and not has_exclude_indicator:
-                absolute_url = urljoin(base_url, href)
-                parsed_url = urlparse(absolute_url)
-                
-                # Enhanced exclusion check
-                exclude_terms = [
-                    'about', 'contact', 'submit', 'subscribe', 'search', 'browse',
-                    'review', 'essay', 'interview', 'conversation', 'profile',
-                    'announcement', 'news', 'winner', 'prize', 'award', 'wins',
-                    'lightness', 'marie-howe', 'ruth-lilly', 'critical-essay',
-                    'building-the-perfect', 'new-and-selected'
-                ]
-                
-                if not any(term in parsed_url.path.lower() for term in exclude_terms):
-                    discovered_links.add(absolute_url)
-                    print(f"  📖 Text indicator found: {absolute_url}")
-        
-    except Exception as e:
-        print(f"❌ Error discovering links from {base_url}: {e}")
-    
-    # Convert to sorted list and remove duplicates
-    unique_links = list(discovered_links)
-    unique_links.sort()
-    
-    print(f"✅ Discovered {len(unique_links)} potential poem links from {base_url}")
-    return unique_links
-
-def discover_all_poem_links(domain: str, max_links: int = 50) -> List[str]:
-    """
-    Discover poem links from all configured URLs for a domain
-    
-    Args:
-        domain: Domain name (e.g., 'poems.com')
-        max_links: Maximum number of links to return
-        
-    Returns:
-        List of discovered poem URLs
-    """
-    if domain not in SITE_CONFIGS:
-        print(f"❌ No configuration found for domain: {domain}")
-        return []
-    
-    config = SITE_CONFIGS[domain]
-    all_links = set()
-    
-    print(f"🌐 Discovering poem links for {config['name']} ({domain})")
-    
-    # Try each base URL
-    for base_url in config['base_urls']:
+    def check_url_accessibility(self, url: str) -> Tuple[bool, int]:
+        """Check if URL is accessible without downloading full content"""
         try:
-            links = get_poem_links(base_url, config)
-            all_links.update(links)
+            response = self.session.head(url, timeout=10, allow_redirects=True)
+            return response.status_code == 200, response.status_code
+        except Exception:
+            try:
+                # Fallback to GET request if HEAD fails
+                response = self.session.get(url, timeout=5, stream=True)
+                return response.status_code == 200, response.status_code
+            except Exception:
+                return False, 0
+    
+    def analyze_poem_structure(self, text: str, html_content: str) -> Dict[str, any]:
+        """Analyze text structure to identify poem characteristics"""
+        lines = text.strip().split('\n')
+        non_empty_lines = [line.strip() for line in lines if line.strip()]
+        
+        # Check for stanza structure (groups of lines separated by blank lines)
+        stanza_breaks = text.count('\n\n')
+        
+        # Check line length patterns (poems often have varied line lengths)
+        line_lengths = [len(line.strip()) for line in non_empty_lines if line.strip()]
+        avg_line_length = sum(line_lengths) / len(line_lengths) if line_lengths else 0
+        line_length_variance = 0
+        if len(line_lengths) > 1:
+            mean = avg_line_length
+            line_length_variance = sum((x - mean) ** 2 for x in line_lengths) / len(line_lengths)
+        
+        # Check for common poetry HTML structures
+        soup = BeautifulSoup(html_content, 'html.parser')
+        has_poetry_tags = bool(soup.find_all(['poem', 'verse', 'stanza']))
+        has_line_breaks = '<br>' in html_content.lower() or '</br>' in html_content.lower()
+        
+        # Check for consistent indentation patterns
+        indented_lines = sum(1 for line in lines if line.startswith('    ') or line.startswith('\t'))
+        indentation_ratio = indented_lines / len(lines) if lines else 0
+        
+        return {
+            'total_lines': len(lines),
+            'non_empty_lines': len(non_empty_lines),
+            'stanza_breaks': stanza_breaks,
+            'avg_line_length': avg_line_length,
+            'line_length_variance': line_length_variance,
+            'has_poetry_tags': has_poetry_tags,
+            'has_line_breaks': has_line_breaks,
+            'indentation_ratio': indentation_ratio,
+            'word_count': len(text.split())
+        }
+    
+    def validate_poem_content(self, url: str) -> ValidationResult:
+        """Enhanced validation of poem content"""
+        try:
+            # First check accessibility
+            is_accessible, status_code = self.check_url_accessibility(url)
+            if not is_accessible:
+                return ValidationResult(
+                    is_poem=False,
+                    confidence_score=0.0,
+                    reasons=[f"URL not accessible (HTTP {status_code})"],
+                    content_length=0,
+                    has_line_breaks=False,
+                    has_stanzas=False
+                )
             
-            # Add delay between requests to be respectful
-            time.sleep(1)
+            # Get full content
+            response = self.session.get(url, timeout=15)
+            if response.status_code != 200:
+                return ValidationResult(
+                    is_poem=False,
+                    confidence_score=0.0,
+                    reasons=[f"HTTP {response.status_code}"],
+                    content_length=0,
+                    has_line_breaks=False,
+                    has_stanzas=False
+                )
+            
+            soup = BeautifulSoup(response.content, 'html.parser')
+            
+            # Remove navigation, footer, and other non-content elements
+            for element in soup(['nav', 'footer', 'header', 'aside', 'script', 'style']):
+                element.decompose()
+            
+            # Extract main content
+            main_content = soup.find('main') or soup.find('article') or soup.find('div', class_=re.compile('content|poem|post'))
+            if main_content:
+                text = main_content.get_text()
+                html_content = str(main_content)
+            else:
+                text = soup.get_text()
+                html_content = str(soup)
+            
+            # Clean up text
+            text = re.sub(r'\s+', ' ', text).strip()
+            
+            # Analyze structure
+            structure = self.analyze_poem_structure(text, html_content)
+            
+            # Scoring system
+            score = 0.0
+            reasons = []
+            
+            # Positive indicators
+            if structure['has_poetry_tags']:
+                score += 0.3
+                reasons.append("Contains poetry HTML tags")
+            
+            if structure['has_line_breaks']:
+                score += 0.2
+                reasons.append("Contains line breaks")
+            
+            if structure['stanza_breaks'] > 0:
+                score += 0.25
+                reasons.append(f"Contains {structure['stanza_breaks']} stanza breaks")
+            
+            # Word count analysis (poems typically 20-500 words)
+            word_count = structure['word_count']
+            if 20 <= word_count <= 500:
+                score += 0.2
+                reasons.append(f"Appropriate word count ({word_count})")
+            elif word_count < 20:
+                score -= 0.2
+                reasons.append(f"Too short ({word_count} words)")
+            elif word_count > 1000:
+                score -= 0.3
+                reasons.append(f"Too long ({word_count} words)")
+            
+            # Line structure analysis
+            if 3 <= structure['non_empty_lines'] <= 100:
+                score += 0.15
+                reasons.append(f"Good line count ({structure['non_empty_lines']})")
+            
+            # Check for varied line lengths (characteristic of poetry)
+            if structure['line_length_variance'] > 50:
+                score += 0.1
+                reasons.append("Varied line lengths")
+            
+            # Negative indicators
+            prose_indicators = [
+                'paragraph', 'essay', 'article', 'review', 'interview',
+                'table of contents', 'bibliography', 'abstract',
+                'conclusion', 'introduction', 'methodology'
+            ]
+            
+            text_lower = text.lower()
+            prose_matches = sum(1 for indicator in prose_indicators if indicator in text_lower)
+            if prose_matches > 2:
+                score -= 0.3
+                reasons.append(f"Contains prose indicators ({prose_matches})")
+            
+            # Check for commercial/non-poetry content
+            commercial_indicators = [
+                'subscribe', 'newsletter', 'buy now', 'purchase',
+                'advertisement', 'sponsor', 'donate', 'payment'
+            ]
+            commercial_matches = sum(1 for indicator in commercial_indicators if indicator in text_lower)
+            if commercial_matches > 1:
+                score -= 0.2
+                reasons.append("Contains commercial content")
+            
+            # Final adjustments
+            confidence_score = max(0.0, min(1.0, score))
+            is_poem = confidence_score >= 0.6
+            
+            return ValidationResult(
+                is_poem=is_poem,
+                confidence_score=confidence_score,
+                reasons=reasons,
+                content_length=len(text),
+                has_line_breaks=structure['has_line_breaks'],
+                has_stanzas=structure['stanza_breaks'] > 0
+            )
             
         except Exception as e:
-            print(f"❌ Failed to discover links from {base_url}: {e}")
-    
-    # Convert to list and limit results
-    final_links = list(all_links)[:max_links]
-    
-    print(f"🎯 Total discovered links for {domain}: {len(final_links)}")
-    return final_links
+            return ValidationResult(
+                is_poem=False,
+                confidence_score=0.0,
+                reasons=[f"Validation error: {str(e)}"],
+                content_length=0,
+                has_line_breaks=False,
+                has_stanzas=False
+            )
 
-def validate_poem_url(url: str) -> bool:
-    """
-    Validate that a URL actually contains a poem
+class PoemLinkCache:
+    """Cache system to avoid re-validating the same URLs"""
     
-    Args:
-        url: URL to validate
-        
-    Returns:
-        True if URL contains a poem, False otherwise
-    """
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (compatible; PoetryBot/1.0)',
-        'Accept': 'text/html,application/xhtml+xml'
-    }
+    def __init__(self, cache_file: str = 'poem_cache.json'):
+        self.cache_file = cache_file
+        self.cache = self.load_cache()
     
-    try:
-        response = requests.get(url, headers=headers, timeout=10)
-        if response.status_code != 200:
-            return False
-        
-        soup = BeautifulSoup(response.content, 'html.parser')
-        text = soup.get_text().lower()
-        
-        # Look for poem indicators
-        poem_indicators = [
-            'poem', 'poetry', 'verse', 'stanza', 'line break',
-            'metaphor', 'imagery', 'rhythm', 'rhyme'
-        ]
-        
-        # Look for non-poem indicators (essays, news, etc.)
-        non_poem_indicators = [
-            'essay', 'article', 'review', 'interview', 'news',
-            'announcement', 'press release', 'biography', 'about the author',
-            'table of contents', 'subscribe', 'newsletter'
-        ]
-        
-        poem_score = sum(1 for indicator in poem_indicators if indicator in text)
-        non_poem_score = sum(1 for indicator in non_poem_indicators if indicator in text)
-        
-        # Simple scoring: more poem indicators than non-poem indicators
-        return poem_score > non_poem_score
-        
-    except Exception as e:
-        print(f"⚠️  Validation failed for {url}: {e}")
-        return False
+    def load_cache(self) -> Dict:
+        """Load cache from file"""
+        try:
+            with open(self.cache_file, 'r') as f:
+                return json.load(f)
+        except FileNotFoundError:
+            return {}
+    
+    def save_cache(self):
+        """Save cache to file"""
+        with open(self.cache_file, 'w') as f:
+            json.dump(self.cache, f, indent=2)
+    
+    def get_validation(self, url: str) -> Optional[ValidationResult]:
+        """Get cached validation result"""
+        if url in self.cache:
+            data = self.cache[url]
+            return ValidationResult(**data)
+        return None
+    
+    def cache_validation(self, url: str, result: ValidationResult):
+        """Cache validation result"""
+        self.cache[url] = {
+            'is_poem': result.is_poem,
+            'confidence_score': result.confidence_score,
+            'reasons': result.reasons,
+            'content_length': result.content_length,
+            'has_line_breaks': result.has_line_breaks,
+            'has_stanzas': result.has_stanzas
+        }
+        self.save_cache()
 
-def test_poem_discovery():
-    """Test the poem discovery system"""
-    print("🧪 Testing Poem Link Discovery System")
-    print("=" * 60)
+def batch_validate_urls(urls: List[str], max_workers: int = 3) -> Dict[str, ValidationResult]:
+    """Validate multiple URLs with rate limiting"""
+    validator = EnhancedPoemValidator()
+    cache = PoemLinkCache()
+    results = {}
     
-    # Test each configured domain
-    for domain in SITE_CONFIGS.keys():
-        print(f"\n🔍 Testing {domain}...")
+    for i, url in enumerate(urls):
+        print(f"Validating {i+1}/{len(urls)}: {url}")
         
-        links = discover_all_poem_links(domain, max_links=10)
+        # Check cache first
+        cached_result = cache.get_validation(url)
+        if cached_result:
+            print(f"  ✅ Using cached result: {cached_result.confidence_score:.2f}")
+            results[url] = cached_result
+            continue
         
-        if links:
-            print(f"✅ Found {len(links)} potential poem links")
-            
-            # Test validation on first few links
-            print("🔬 Validating first 3 links...")
-            for i, link in enumerate(links[:3]):
-                is_valid = validate_poem_url(link)
-                status = "✅ Valid poem" if is_valid else "❌ Not a poem"
-                print(f"   {i+1}. {status}: {link}")
-        else:
-            print("❌ No links discovered")
+        # Validate URL
+        result = validator.validate_poem_content(url)
+        results[url] = result
         
-        print("-" * 40)
+        # Cache result
+        cache.cache_validation(url, result)
+        
+        # Print result
+        status = "✅ POEM" if result.is_poem else "❌ NOT POEM"
+        print(f"  {status} (confidence: {result.confidence_score:.2f})")
+        if result.reasons:
+            print(f"    Reasons: {', '.join(result.reasons[:3])}")
+        
+        # Rate limiting
+        time.sleep(1)
+    
+    return results
 
-def save_discovered_links(output_file: str = 'discovered_poem_links.json'):
-    """
-    Discover and save all poem links to a JSON file
+def filter_high_quality_poems(validation_results: Dict[str, ValidationResult], 
+                             min_confidence: float = 0.7) -> List[str]:
+    """Filter URLs to only high-confidence poems"""
+    high_quality = []
     
-    Args:
-        output_file: Output filename for the JSON file
-    """
-    all_discovered = {}
+    for url, result in validation_results.items():
+        if result.is_poem and result.confidence_score >= min_confidence:
+            high_quality.append(url)
     
-    for domain in SITE_CONFIGS.keys():
-        print(f"\n🔍 Processing {domain}...")
-        links = discover_all_poem_links(domain, max_links=100)
-        
-        if links:
-            # Validate a sample of links
-            validated_links = []
-            for link in links[:20]:  # Validate first 20 links
-                if validate_poem_url(link):
-                    validated_links.append(link)
-                time.sleep(0.5)  # Be respectful with validation requests
-            
-            all_discovered[domain] = {
-                'site_name': SITE_CONFIGS[domain]['name'],
-                'total_discovered': len(links),
-                'all_links': links,
-                'validated_links': validated_links,
-                'validation_sample_size': min(20, len(links))
-            }
-    
-    # Save to JSON file
-    with open(output_file, 'w') as f:
-        json.dump(all_discovered, f, indent=2)
-    
-    print(f"\n💾 Saved discovered links to {output_file}")
-    
-    # Print summary
-    print("\n📊 Discovery Summary:")
-    for domain, data in all_discovered.items():
-        print(f"   {data['site_name']}: {data['total_discovered']} discovered, {len(data['validated_links'])} validated")
+    return high_quality
 
+# Example usage and testing
 if __name__ == "__main__":
-    # Run the test
-    test_poem_discovery()
+    # Test URLs (replace with your actual discovered URLs)
+    test_urls = [
+        "https://poems.com/poem/the-road-not-taken/",
+        "https://www.poetryfoundation.org/poems/44272/the-road-not-taken",
+        "https://poems.com/about/",  # This should be filtered out
+    ]
     
-    # Optionally save all discovered links
-    # save_discovered_links() 
+    print("🧪 Testing Enhanced Poem Validation")
+    print("=" * 50)
+    
+    # Validate URLs
+    results = batch_validate_urls(test_urls)
+    
+    # Filter high-quality poems
+    high_quality_poems = filter_high_quality_poems(results, min_confidence=0.7)
+    
+    print(f"\n📊 Results Summary:")
+    print(f"Total URLs tested: {len(test_urls)}")
+    print(f"Valid poems found: {len([r for r in results.values() if r.is_poem])}")
+    print(f"High-confidence poems: {len(high_quality_poems)}")
+    
+    print(f"\n✅ High-Quality Poem URLs:")
+    for url in high_quality_poems:
+        print(f"  {url}")
