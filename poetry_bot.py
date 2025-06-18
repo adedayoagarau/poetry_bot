@@ -421,41 +421,74 @@ class TwitterPoetryBot(PoetryBot):
     """Twitter-specific poetry bot (extends main bot)"""
     
     def post_poem(self, poem):
-        """Post poem to Twitter with elegant formatting"""
-        if not poem:
+    """Post poem to Twitter with elegant formatting - LIVE POSTING"""
+    if not poem:
+        return False
+    
+    # Create source hashtag (remove spaces and dots)
+    source_hashtag = f"#{poem['source'].replace(' ', '').replace('.', '')}"
+    
+    # Base tweet format
+    tweet_start = f'"{poem["title"]}" by {poem["author"]}\n\n'
+    tweet_end = f'\n\n#Poetry #WritingCommunity {source_hashtag}'
+    
+    # Calculate available space for poem text
+    base_length = len(tweet_start) + len(tweet_end)
+    max_poem_length = 280 - base_length - 5  # Leave some buffer
+    
+    # Truncate poem if needed
+    if len(poem['text']) > max_poem_length:
+        poem_text = poem['text'][:max_poem_length].rstrip() + "..."
+    else:
+        poem_text = poem['text']
+    
+    # Construct final tweet
+    tweet_text = f"{tweet_start}{poem_text}{tweet_end}"
+    
+    print(f"📱 Posting to Twitter LIVE ({len(tweet_text)} chars):")
+    print("-" * 50)
+    print(tweet_text)
+    print("-" * 50)
+    
+    # LIVE TWITTER POSTING
+    try:
+        import tweepy
+        import os
+        
+        # Get Twitter API credentials from environment
+        api_key = os.getenv('TWITTER_API_KEY')
+        api_secret = os.getenv('TWITTER_API_SECRET')
+        access_token = os.getenv('TWITTER_ACCESS_TOKEN')
+        access_token_secret = os.getenv('TWITTER_ACCESS_TOKEN_SECRET')
+        
+        if not all([api_key, api_secret, access_token, access_token_secret]):
+            print("❌ Missing Twitter API credentials in environment variables")
             return False
         
-        # Create source hashtag (remove spaces and dots)
-        source_hashtag = f"#{poem['source'].replace(' ', '').replace('.', '')}"
+        # Authenticate with Twitter
+        auth = tweepy.OAuthHandler(api_key, api_secret)
+        auth.set_access_token(access_token, access_token_secret)
+        api = tweepy.API(auth)
         
-        # Base tweet format
-        tweet_start = f'"{poem["title"]}" by {poem["author"]}\n\n'
-        tweet_end = f'\n\n#Poetry #litcommunity #WritingCommunity {source_hashtag}'
+        # Verify authentication
+        try:
+            api.verify_credentials()
+            print("✅ Twitter authentication successful")
+        except:
+            print("❌ Twitter authentication failed")
+            return False
         
-        # Calculate available space for poem text
-        base_length = len(tweet_start) + len(tweet_end)
-        max_poem_length = 280 - base_length - 5  # Leave some buffer
-        
-        # Truncate poem if needed
-        if len(poem['text']) > max_poem_length:
-            poem_text = poem['text'][:max_poem_length].rstrip() + "..."
-        else:
-            poem_text = poem['text']
-        
-        # Construct final tweet
-        tweet_text = f"{tweet_start}{poem_text}{tweet_end}"
-        
-        print(f"📱 Would post to Twitter ({len(tweet_text)} chars):")
-        print("-" * 50)
-        print(tweet_text)
-        print("-" * 50)
-        
-        # TODO: Implement actual Twitter API posting here
-        # import tweepy
-        # api = tweepy.API(auth)
-        # api.update_status(tweet_text)
-        
+        # Post the tweet
+        response = api.update_status(tweet_text)
+        print(f"🎉 SUCCESS! Posted to Twitter: https://twitter.com/user/status/{response.id}")
         return True
+        
+    except ImportError:
+        print("❌ tweepy library not installed")
+        return False
+    except Exception as e:
+        print(f"❌ Error posting to Twitter: {str(e)}")
+        return False
     
     def run(self):
         """Twitter bot execution"""
