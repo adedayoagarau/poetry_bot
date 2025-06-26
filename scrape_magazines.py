@@ -8,6 +8,7 @@ import time
 # Set up logging
 logging.basicConfig(
     level=logging.DEBUG,  # Changed to DEBUG for more info
+    level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
         logging.FileHandler('magazine_scraper.log'),
@@ -30,8 +31,10 @@ class MagazineScraper:
         try:
             logging.info("Starting magazine scraping...")
             response = requests.get(self.url, headers=self.headers)
+            response = requests.get(self.url, headers=self.headers, timeout=10)
             response.raise_for_status()
             
+
             soup = BeautifulSoup(response.text, 'html.parser')
             
             # Print the entire HTML for inspection
@@ -48,8 +51,11 @@ class MagazineScraper:
             
             # Try to find magazine entries with broader selectors
             magazine_entries = soup.find_all(['article', 'div', 'section'])
+
+            magazine_entries = soup.find_all("article")
             logging.info(f"Found {len(magazine_entries)} potential magazine entries")
             
+
             for entry in magazine_entries:
                 try:
                     # Look for any links that might contain magazine titles
@@ -68,10 +74,33 @@ class MagazineScraper:
                                 self.magazines.append(magazine_info)
                                 logging.info(f"Found magazine: {title}")
                     
+                    title_elem = entry.find("h2") or entry.find("h3")
+                    link = title_elem.find("a") if title_elem else None
+                    if not link:
+                        continue
+
+                    title = link.get_text(strip=True)
+                    href = link.get("href")
+                    if not title or not href:
+                        continue
+
+                    desc_elem = entry.find("div", class_="post-content") or entry.find("p")
+                    description = ""
+                    if desc_elem:
+                        description = " ".join(desc_elem.get_text(separator=" ", strip=True).split())
+
+                    self.magazines.append({
+                        "title": title,
+                        "url": href,
+                        "description": description,
+                    })
+                    logging.info(f"Found magazine: {title}")
+
                 except Exception as e:
                     logging.error(f"Error processing entry: {str(e)}")
                     continue
             
+
             logging.info(f"Successfully scraped {len(self.magazines)} magazines")
             self.save_results()
             
@@ -87,6 +116,8 @@ class MagazineScraper:
                     'total_count': len(self.magazines),
                     'scraped_at': datetime.now().isoformat()
                 }, f, indent=2, ensure_ascii=False)
+            with open("poetry_magazines.json", "w", encoding="utf-8") as f:
+                json.dump(self.magazines, f, indent=2, ensure_ascii=False)
             logging.info("Saved results to poetry_magazines.json")
         except Exception as e:
             logging.error(f"Error saving results: {str(e)}")
@@ -94,3 +125,4 @@ class MagazineScraper:
 if __name__ == "__main__":
     scraper = MagazineScraper()
     scraper.scrape_magazines() 
+    scraper.scrape_magazines()

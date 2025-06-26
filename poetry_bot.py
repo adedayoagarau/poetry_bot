@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """
-Complete Poetry Bot with Integrated Discovery System
-Finds and extracts high-quality poems from 120+ sources
-Twitter API v2 Compatible for Free Tier
+Enhanced Poetry Bot with Improved Rotation and State Tracking
+Fixes repetition issues by expanding discovery and tracking posted poems
 """
 
 import requests
@@ -13,6 +12,8 @@ import random
 from urllib.parse import urlparse
 from typing import List, Dict, Optional
 import json
+import os
+from datetime import datetime, timedelta
 
 # Import the discovery system
 from poem_link_discovery import (
@@ -22,8 +23,8 @@ from poem_link_discovery import (
     filter_high_quality_poems
 )
 
-class PoetryBot:
-    """Main Poetry Bot with discovery and extraction capabilities"""
+class EnhancedPoetryBot:
+    """Enhanced Poetry Bot with better rotation and state tracking"""
     
     def __init__(self):
         self.session = requests.Session()
@@ -34,10 +35,96 @@ class PoetryBot:
             'Connection': 'keep-alive'
         })
         
-        # Cache for discovered URLs
+        # Enhanced caching with expiration
         self.discovered_urls = {}
         self.failed_urls = set()
         
+        # State tracking files
+        self.posted_poems_file = 'posted_poems.json'
+        self.url_cache_file = 'url_cache.json'
+        
+        # Load state
+        self.posted_poems = self.load_posted_poems()
+        self.load_url_cache()
+        
+    def load_posted_poems(self) -> set:
+        """Load history of posted poems to avoid duplicates"""
+        try:
+            if os.path.exists(self.posted_poems_file):
+                with open(self.posted_poems_file, 'r') as f:
+                    data = json.load(f)
+                    return set(data.get('posted_urls', []))
+            return set()
+        except Exception as e:
+            print(f"⚠️  Error loading posted poems: {e}")
+            return set()
+    
+    def save_posted_poem(self, poem_data: dict):
+        """Save a posted poem to avoid future duplicates"""
+        try:
+            self.posted_poems.add(poem_data['url'])
+            
+            # Load existing data
+            posted_data = {'posted_urls': list(self.posted_poems), 'poems': []}
+            if os.path.exists(self.posted_poems_file):
+                with open(self.posted_poems_file, 'r') as f:
+                    posted_data = json.load(f)
+            
+            # Add new poem with metadata
+            posted_data['posted_urls'] = list(self.posted_poems)
+            posted_data['poems'].append({
+                'url': poem_data['url'],
+                'title': poem_data['title'],
+                'author': poem_data['author'],
+                'source': poem_data['source'],
+                'posted_at': datetime.now().isoformat()
+            })
+            
+            # Keep only last 500 poems to prevent file bloat
+            posted_data['poems'] = posted_data['poems'][-500:]
+            
+            with open(self.posted_poems_file, 'w') as f:
+                json.dump(posted_data, f, indent=2)
+                
+        except Exception as e:
+            print(f"⚠️  Error saving posted poem: {e}")
+    
+    def load_url_cache(self):
+        """Load cached URLs with expiration check"""
+        try:
+            if os.path.exists(self.url_cache_file):
+                with open(self.url_cache_file, 'r') as f:
+                    cache_data = json.load(f)
+                    
+                current_time = datetime.now()
+                
+                # Filter out expired entries (older than 7 days)
+                for domain, data in cache_data.items():
+                    cached_time = datetime.fromisoformat(data.get('cached_at', '2020-01-01'))
+                    if current_time - cached_time < timedelta(days=7):
+                        self.discovered_urls[domain] = data['urls']
+                    else:
+                        print(f"🗑️  Expired cache for {domain}")
+                        
+        except Exception as e:
+            print(f"⚠️  Error loading URL cache: {e}")
+    
+    def save_url_cache(self):
+        """Save discovered URLs with timestamp"""
+        try:
+            cache_data = {}
+            for domain, urls in self.discovered_urls.items():
+                cache_data[domain] = {
+                    'urls': urls,
+                    'cached_at': datetime.now().isoformat()
+                }
+            
+            with open(self.url_cache_file, 'w') as f:
+                json.dump(cache_data, f, indent=2)
+                
+        except Exception as e:
+            print(f"⚠️  Error saving URL cache: {e}")
+
     def validate_poem_content(self, poem_data, url=None):
         """Enhanced validation that poem content is real and complete"""
         if not poem_data:
@@ -110,75 +197,6 @@ class PoetryBot:
         essay_count = sum(1 for pattern in essay_patterns if pattern in text_lower)
         if essay_count >= 2:
             return False, f"Content appears to be essay/review about poetry ({essay_count} essay patterns found)"
-        
-        # Title analysis for non-poetry content
-        problematic_titles = [
-            'review of', 'essay', 'interview', 'conversation with', 'profile',
-            'announcement', 'winner', 'prize', 'award', 'selected poems',
-            'new and selected', 'biography', 'memoir', 'critical essay',
-            'marie howe', 'ruth lilly', 'building the perfect',
-            'poetry and lightness', 'lightness', 'six memos',
-            'calvino', 'italo calvino', 'craft essay', 'poetics'
-        ]
-        
-        for indicator in problematic_titles:
-            if indicator in title_lower:
-                return False, f"Title indicates non-poem content: '{indicator}' in '{title}'"
-        
-        # Navigation/metadata detection
-        nav_patterns = [
-            'table of contents', 'contents', 'browse', 'archive', 'search results',
-            'subscription', 'newsletter', 'featured', 'latest', 'recent',
-            'shortlist', 'issue', 'volume', 'submissions', 'contest',
-            'author index', 'title index', 'editorial board',
-            'macarthur', 'national book award', 'poet laureate', 'pulitzer prize'
-        ]
-        
-        nav_count = sum(1 for pattern in nav_patterns if pattern in text_lower)
-        if nav_count >= 2:
-            return False, "Content appears to be navigation/metadata, not actual poetry"
-        
-        # Biographical content detection
-        bio_patterns = [
-            'first book', 'second book', 'latest book', 'published in', 'appears in',
-            'winner of', 'recipient of', 'teaches at', 'professor at', 'lives in',
-            'born in', 'graduated from', 'mfa', 'phd', 'university', 'college',
-            'press', 'publisher', 'publication', 'four way books', 'copper canyon'
-        ]
-        
-        bio_count = sum(1 for pattern in bio_patterns if pattern in text_lower)
-        if bio_count >= 3:
-            return False, f"Content appears to be biographical information ({bio_count} bio indicators)"
-        
-        # Check for error pages
-        error_patterns = [
-            'page not found', '404', 'error', 'access denied',
-            'subscription required', 'login required', 'not available',
-            'coming soon', 'under construction', 'temporarily unavailable'
-        ]
-        
-        for pattern in error_patterns:
-            if pattern in text_lower:
-                return False, f"Content contains error pattern: {pattern}"
-        
-        # Publication/book description detection
-        publication_phrases = [
-            'first book', 'latest collection', 'new book', 'forthcoming',
-            'new and selected', 'building the perfect', 'four way books',
-            'copper canyon press', 'sixth book of poetry', 'chronicle of drifting'
-        ]
-        
-        for phrase in publication_phrases:
-            if phrase in text_lower:
-                return False, f"Content appears to be publication description: '{phrase}'"
-        
-        # Check for reasonable title and author
-        if len(title) > 100:
-            return False, "Title too long (likely extracted wrong content)"
-        
-        author = poem_data['author'].strip()
-        if author.lower() in ['unknown', 'anonymous', ''] and 'ai generated' not in poem_data['source'].lower():
-            return False, "Missing author information"
         
         # Word count validation
         word_count = len(text.split())
@@ -335,18 +353,47 @@ class PoetryBot:
             self.failed_urls.add(url)
             return None
     
-    def discover_poems_from_source(self, domain, max_poems=10):
-        """Discover and extract poems from a specific domain"""
+    def discover_poems_from_source(self, domain, max_poems=70):  # MASSIVE INCREASE FOR VARIETY
+        """Discover and extract poems from a specific domain with huge pool"""
         print(f"🔍 Discovering poems from {domain}...")
         
-        if domain in self.discovered_urls:
-            urls = self.discovered_urls[domain]
+        # Check if we need to refresh the cache
+        refresh_cache = False
+        if domain not in self.discovered_urls:
+            refresh_cache = True
         else:
-            urls = discover_all_poem_links(domain, max_links=50)
+            # Use cached URLs but consider refreshing if we've used too many
+            cached_urls = self.discovered_urls[domain]
+            unused_urls = [url for url in cached_urls if url not in self.posted_poems]
+            if len(unused_urls) < 20:  # Refresh if less than 20 unused URLs (was 5)
+                print(f"🔄 Refreshing cache for {domain} (only {len(unused_urls)} unused URLs)")
+                refresh_cache = True
+        
+        if refresh_cache:
+            # Discover even more URLs to support 70 poems per source
+            urls = discover_all_poem_links(domain, max_links=200)  # INCREASED for 70 poems
             self.discovered_urls[domain] = urls
+            self.save_url_cache()
+        else:
+            urls = self.discovered_urls[domain]
+        
+        # Filter out already posted URLs
+        unused_urls = [url for url in urls if url not in self.posted_poems]
+        
+        if not unused_urls:
+            print(f"⚠️  No unused URLs for {domain}, refreshing...")
+            urls = discover_all_poem_links(domain, max_links=200)  # INCREASED for 70 poems
+            self.discovered_urls[domain] = urls
+            self.save_url_cache()
+            unused_urls = [url for url in urls if url not in self.posted_poems]
+        
+        print(f"📊 {domain}: {len(unused_urls)} unused URLs available")
+        
+        # Randomize order to avoid always picking the same ones
+        random.shuffle(unused_urls)
         
         poems = []
-        for url in urls:
+        for url in unused_urls:
             if len(poems) >= max_poems:
                 break
                 
@@ -358,43 +405,45 @@ class PoetryBot:
                     print(f"✅ Extracted: {poem['title']} by {poem['author']}")
                 
                 # Be respectful with delays
-                time.sleep(1)
+                time.sleep(0.5)  # Reduced delay since we're doing more requests
         
         return poems
     
     def get_daily_poem(self):
-        """Get a high-quality daily poem from multiple sources"""
-        print("🎯 Finding today's poem...")
+        """Get a high-quality daily poem with better rotation"""
+        print("🎯 Finding today's poem with improved rotation...")
         
-        # Prioritized sources (best first)
-        priority_sources = [
-            'poems.com',           # Poetry Daily
-            'poetryfoundation.org', # Poetry Foundation  
-            'poets.org',           # Academy of American Poets
-            'versedaily.org',      # Verse Daily
-            'poetrymagazine.org'   # Poetry Magazine
-        ]
+        # Get all available domains and randomize order
+        all_domains = list(SITE_CONFIGS.keys())
+        random.shuffle(all_domains)
         
+        # Try to get poems from multiple sources
+        for domain in all_domains:
+            poems = self.discover_poems_from_source(domain, max_poems=70)  # MASSIVE pool per source
+            if poems:
+                # Filter out already posted poems
+                unposted_poems = [p for p in poems if p['url'] not in self.posted_poems]
+                if unposted_poems:
+                    selected_poem = random.choice(unposted_poems)
+                    print(f"🎉 Selected poem from {selected_poem['source']}")
+                    return selected_poem
+        
+        print("⚠️  All discovered poems have been posted. Trying fresh discovery...")
+        
+        # If all poems have been posted, clear some cache and try again
+        priority_sources = ['poems.com', 'poetryfoundation.org', 'poets.org']
         for domain in priority_sources:
-            if domain in SITE_CONFIGS:
-                poems = self.discover_poems_from_source(domain, max_poems=3)
-                if poems:
-                    # Return the first valid poem found
-                    return random.choice(poems)
-        
-        # If priority sources fail, try other sources
-        print("🔄 Trying backup sources...")
-        backup_sources = [k for k in SITE_CONFIGS.keys() if k not in priority_sources]
-        
-        for domain in random.sample(backup_sources, min(5, len(backup_sources))):
-            poems = self.discover_poems_from_source(domain, max_poems=2)
+            if domain in self.discovered_urls:
+                del self.discovered_urls[domain]  # Force fresh discovery
+            
+            poems = self.discover_poems_from_source(domain, max_poems=70)  # Maintain consistency
             if poems:
                 return random.choice(poems)
         
         return None
     
     def run(self):
-        """Main bot execution - get and display a poem"""
+        """Main bot execution with state tracking"""
         try:
             poem = self.get_daily_poem()
             
@@ -405,9 +454,15 @@ class PoetryBot:
                 print(f"Title: {poem['title']}")
                 print(f"Author: {poem['author']}")
                 print(f"Source: {poem['source']}")
+                print(f"URL: {poem['url']}")
                 print("\n" + "-"*50)
                 print(poem['text'])
                 print("-"*50)
+                
+                # Save to posted history
+                self.save_posted_poem(poem)
+                print(f"💾 Saved to posted history ({len(self.posted_poems)} total posted)")
+                
                 return poem
             else:
                 print("❌ No poem found today. Please try again later.")
@@ -418,56 +473,86 @@ class PoetryBot:
             return None
 
 
-class TwitterPoetryBot(PoetryBot):
-    """Twitter-specific poetry bot with API v2 support for free tier"""
+class TwitterPoetryBot(EnhancedPoetryBot):
+    """Twitter-specific enhanced poetry bot"""
     
     def post_poem(self, poem):
-        """Post poem to Twitter using API v2 - FREE TIER COMPATIBLE"""
+        """Post poem to Twitter using API v2 - 4-6 lines with link"""
         if not poem:
             return False
         
-        # Create source hashtag (remove spaces and dots)
+        # Create source hashtag
         source_hashtag = f"#{poem['source'].replace(' ', '').replace('.', '')}"
         
-        # Base tweet format
-        tweet_start = f'"{poem["title"]}" by {poem["author"]}\n\n'
-        tweet_end = f'\n\n#Poetry #WritingCommunity {source_hashtag}'
+        # Extract 4-6 lines from the poem
+        poem_lines = [line.strip() for line in poem['text'].split('\n') if line.strip()]
         
-        # Calculate available space for poem text
-        base_length = len(tweet_start) + len(tweet_end)
-        max_poem_length = 280 - base_length - 5  # Leave some buffer
-        
-        # Truncate poem if needed
-        if len(poem['text']) > max_poem_length:
-            poem_text = poem['text'][:max_poem_length].rstrip() + "..."
+        # Select 4-6 lines (prefer 4-5 for better Twitter format)
+        if len(poem_lines) >= 6:
+            selected_lines = poem_lines[:5]  # Take first 5 lines
+            has_more = True
+        elif len(poem_lines) >= 4:
+            selected_lines = poem_lines[:4]  # Take first 4 lines
+            has_more = len(poem_lines) > 4
         else:
-            poem_text = poem['text']
+            selected_lines = poem_lines  # Use all available lines
+            has_more = False
         
-        # Construct final tweet
-        tweet_text = f"{tweet_start}{poem_text}{tweet_end}"
+        # Join selected lines
+        poem_excerpt = '\n'.join(selected_lines)
         
-        print(f"📱 Posting to Twitter with API v2 ({len(tweet_text)} chars):")
+        # Add continuation indicator if there are more lines
+        if has_more:
+            poem_excerpt += '\n...'
+        
+        # Tweet format with link
+        tweet_start = f'"{poem["title"]}" by {poem["author"]}\n\n'
+        tweet_middle = f'{poem_excerpt}\n\n'
+        
+        # Add link to full poem
+        read_more = f'Read full poem: {poem["url"]}\n\n'
+        
+        tweet_end = f'#Poetry #WritingCommunity {source_hashtag}'
+        
+        # Construct tweet
+        tweet_text = f"{tweet_start}{tweet_middle}{read_more}{tweet_end}"
+        
+        # If still too long, remove some lines
+        while len(tweet_text) > 280 and len(selected_lines) > 2:
+            selected_lines = selected_lines[:-1]  # Remove last line
+            poem_excerpt = '\n'.join(selected_lines)
+            if has_more or len(poem_lines) > len(selected_lines):
+                poem_excerpt += '\n...'
+            tweet_middle = f'{poem_excerpt}\n\n'
+            tweet_text = f"{tweet_start}{tweet_middle}{read_more}{tweet_end}"
+        
+        # Final length check and fallback
+        if len(tweet_text) > 280:
+            # Emergency fallback: just title, author, and link
+            tweet_text = f'"{poem["title"]}" by {poem["author"]}\n\nRead full poem: {poem["url"]}\n\n#Poetry {source_hashtag}'
+            
+        print(f"📱 Posting to Twitter ({len(tweet_text)} chars):")
         print("-" * 50)
         print(tweet_text)
         print("-" * 50)
+        print(f"📊 Excerpt: {len(selected_lines)} lines from {len(poem_lines)} total lines")
         
-        # LIVE TWITTER POSTING with API v2
+        # Twitter API posting code
         try:
             import tweepy
             import os
             
-            # Get Twitter API credentials from environment
+            # Get credentials
             api_key = os.getenv('TWITTER_API_KEY')
             api_secret = os.getenv('TWITTER_API_SECRET')
             access_token = os.getenv('TWITTER_ACCESS_TOKEN')
             access_token_secret = os.getenv('TWITTER_ACCESS_TOKEN_SECRET')
-            bearer_token = os.getenv('TWITTER_BEARER_TOKEN')  # Optional
+            bearer_token = os.getenv('TWITTER_BEARER_TOKEN')
             
             if not all([api_key, api_secret, access_token, access_token_secret]):
-                print("❌ Missing Twitter API credentials in environment variables")
+                print("❌ Missing Twitter API credentials")
                 return False
             
-            # Use Twitter API v2 Client (compatible with free tier)
             client = tweepy.Client(
                 consumer_key=api_key,
                 consumer_secret=api_secret,
@@ -477,38 +562,37 @@ class TwitterPoetryBot(PoetryBot):
                 wait_on_rate_limit=True
             )
             
-            # Verify authentication with API v2
-            try:
-                me = client.get_me()
-                print(f"✅ Twitter API v2 authentication successful - @{me.data.username}")
-            except Exception as auth_error:
-                print(f"❌ Twitter authentication failed: {auth_error}")
-                return False
+            # Verify authentication
+            me = client.get_me()
+            print(f"✅ Authenticated as @{me.data.username}")
             
-            # Post the tweet using API v2
+            # Post tweet
             response = client.create_tweet(text=tweet_text)
             tweet_id = response.data['id']
-            username = me.data.username
-            print(f"🎉 SUCCESS! Posted to Twitter: https://twitter.com/{username}/status/{tweet_id}")
+            print(f"🎉 Posted: https://twitter.com/{me.data.username}/status/{tweet_id}")
+            
             return True
             
         except ImportError:
             print("❌ tweepy library not installed")
             return False
         except Exception as e:
-            print(f"❌ Error posting to Twitter: {str(e)}")
+            print(f"❌ Twitter error: {str(e)}")
             return False
     
     def run(self):
-        """Twitter bot execution"""
+        """Enhanced Twitter bot execution"""
         poem = self.get_daily_poem()
         if poem:
-            self.post_poem(poem)
+            success = self.post_poem(poem)
+            if success:
+                # Save to posted history
+                self.save_posted_poem(poem)
             return poem
         return None
 
 
 if __name__ == "__main__":
-    print("🤖 Poetry Bot Starting...")
-    bot = PoetryBot()
+    print("🤖 Enhanced Poetry Bot Starting...")
+    bot = EnhancedPoetryBot()
     bot.run()

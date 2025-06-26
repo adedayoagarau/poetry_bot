@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
 MEGA Poem Link Discovery System with Enhanced Validation
-Supports 120+ poetry sources with smart URL discovery and validation
+Supports 75+ poetry sources with smart URL discovery and validation
+MASSIVE EXPANSION - Now includes premium magazines like The Paris Review, Kenyon Review, etc.
 """
 
 import requests
@@ -14,7 +15,7 @@ import json
 from dataclasses import dataclass
 import logging
 
-# MEGA SITE CONFIGURATIONS FOR 120+ POETRY SOURCES
+# MEGA SITE CONFIGURATIONS FOR 75+ POETRY SOURCES
 SITE_CONFIGS = {
     
     # TIER 1: PREMIER SOURCES - Most reliable, daily/high-frequency
@@ -64,26 +65,6 @@ SITE_CONFIGS = {
         ]
     },
     
-    'versedaily.org': {
-        'name': 'Verse Daily',
-        'base_urls': [
-            'https://www.versedaily.org/',
-            'https://www.versedaily.org/archive.html'
-        ],
-        'poem_patterns': [
-            r'^/\d{4}/.*\.html$',
-            r'^/poems/.*\.html$'
-        ],
-        'css_selectors': [
-            'a[href$=".html"]',
-            'div.archive a',
-            '.content a[href*=".html"]'
-        ],
-        'exclude_patterns': [
-            r'/about', r'/contact', r'/submit', r'/index'
-        ]
-    },
-    
     'poets.org': {
         'name': 'Academy of American Poets',
         'base_urls': [
@@ -105,6 +86,175 @@ SITE_CONFIGS = {
         ]
     },
     
+    'versedaily.org': {
+        'name': 'Verse Daily',
+        'base_urls': [
+            'https://www.versedaily.org/',
+            'https://www.versedaily.org/archive.html'
+        ],
+        'poem_patterns': [
+            r'^/\d{4}/.*\.html$',
+            r'^/poems/.*\.html$'
+        ],
+        'css_selectors': [
+            'a[href$=".html"]',
+            'div.archive a',
+            '.content a[href*=".html"]'
+        ],
+        'exclude_patterns': [
+            r'/about', r'/contact', r'/submit', r'/index'
+        ]
+    },
+    
+    # TIER 1.5: LEGENDARY LITERARY MAGAZINES (NEWLY ADDED)
+    'theparisreview.org': {
+        'name': 'The Paris Review',
+        'base_urls': [
+            'https://theparisreview.org/poetry/',
+            'https://theparisreview.org/blog/',
+            'https://theparisreview.org/category/poetry/'
+        ],
+        'poem_patterns': [
+            r'^/poetry/.*$',
+            r'^/blog/.*poetry.*$',
+            r'^/\d{4}/\d{2}/\d{2}/.*$'
+        ],
+        'css_selectors': [
+            'a[href*="/poetry/"]',
+            'article h2 a',
+            '.post-title a'
+        ],
+        'exclude_patterns': [
+            r'/about', r'/interviews', r'/fiction', r'/art', r'/staff'
+        ]
+    },
+    
+    'kenyonreview.org': {
+        'name': 'The Kenyon Review',
+        'base_urls': [
+            'https://kenyonreview.org/poetry/',
+            'https://kenyonreview.org/blog/',
+            'https://kenyonreview.org/kr-online-issue/'
+        ],
+        'poem_patterns': [
+            r'^/poetry/.*$',
+            r'^/blog/.*$',
+            r'^/kr-online-issue/.*$'
+        ],
+        'css_selectors': [
+            'a[href*="/poetry/"]',
+            'article h2 a',
+            '.entry-title a'
+        ],
+        'exclude_patterns': [
+            r'/about', r'/interviews', r'/fiction', r'/reviews'
+        ]
+    },
+    
+    'tinhouse.com': {
+        'name': 'Tin House',
+        'base_urls': [
+            'https://tinhouse.com/category/poetry/',
+            'https://tinhouse.com/category/online-features/'
+        ],
+        'poem_patterns': [
+            r'^/.*poetry.*$',
+            r'^/online-features/.*$',
+            r'^/\d{4}/\d{2}/.*$'
+        ],
+        'css_selectors': [
+            'a[href*="/poetry/"]',
+            'article h2 a',
+            '.post-title a'
+        ],
+        'exclude_patterns': [
+            r'/about', r'/books', r'/workshops', r'/events'
+        ]
+    },
+    
+    'thesouthernreview.org': {
+        'name': 'The Southern Review',
+        'base_urls': [
+            'https://thesouthernreview.org/',
+            'https://thesouthernreview.org/category/poetry/'
+        ],
+        'poem_patterns': [
+            r'^/poetry/.*$',
+            r'^/category/poetry/.*$',
+            r'^/\d{4}/.*$'
+        ],
+        'css_selectors': [
+            'a[href*="/poetry/"]',
+            'article h2 a'
+        ],
+        'exclude_patterns': [
+            r'/about', r'/staff', r'/submissions'
+        ]
+    },
+    
+    'prairieschooner.unl.edu': {
+        'name': 'Prairie Schooner',
+        'base_urls': [
+            'https://prairieschooner.unl.edu/',
+            'https://prairieschooner.unl.edu/poetry/',
+            'https://prairieschooner.unl.edu/blog/'
+        ],
+        'poem_patterns': [
+            r'^/poetry/.*$',
+            r'^/blog/.*$',
+            r'^/current-issue/.*$'
+        ],
+        'css_selectors': [
+            'a[href*="/poetry/"]',
+            'article h2 a'
+        ],
+        'exclude_patterns': [
+            r'/about', r'/staff', r'/submissions'
+        ]
+    },
+    
+    'pshares.org': {
+        'name': 'Ploughshares',
+        'base_urls': [
+            'https://pshares.org/poetry/',
+            'https://pshares.org/issues/online/',
+            'https://pshares.org/read/'
+        ],
+        'poem_patterns': [
+            r'^/poetry/.*$',
+            r'^/issues/online/.*$',
+            r'^/read/.*$'
+        ],
+        'css_selectors': [
+            'a[href*="/poetry/"]',
+            'a[href*="/read/"]',
+            'article h2 a'
+        ],
+        'exclude_patterns': [
+            r'/about', r'/writers', r'/news'
+        ]
+    },
+    
+    'threepennyreview.com': {
+        'name': 'The Threepenny Review',
+        'base_urls': [
+            'https://www.threepennyreview.com/',
+            'https://www.threepennyreview.com/samples/'
+        ],
+        'poem_patterns': [
+            r'^/samples/.*$',
+            r'^/.*poetry.*$'
+        ],
+        'css_selectors': [
+            'a[href*="/samples/"]',
+            'article a'
+        ],
+        'exclude_patterns': [
+            r'/about', r'/subscribe', r'/back-issues'
+        ]
+    },
+    
+    # TIER 2: MAJOR POETRY MAGAZINES
     'poetrymagazine.org': {
         'name': 'Poetry Magazine',
         'base_urls': [
@@ -124,7 +274,120 @@ SITE_CONFIGS = {
         ]
     },
     
-    # TIER 2: UNIVERSITY & PRESTIGIOUS JOURNALS
+    'rattle.com': {
+        'name': 'Rattle Magazine',
+        'base_urls': [
+            'https://rattle.com/poetry/',
+            'https://rattle.com/category/poetry/'
+        ],
+        'poem_patterns': [
+            r'^/poetry/.*$',
+            r'^/\d{4}/\d{2}/.*$'
+        ],
+        'css_selectors': [
+            'a[href*="/poetry/"]',
+            'article a',
+            '.rattle-post a'
+        ],
+        'exclude_patterns': [
+            r'/about', r'/submit', r'/subscribe', r'/category'
+        ]
+    },
+    
+    'bpj.org': {
+        'name': 'Beloit Poetry Journal',
+        'base_urls': [
+            'https://www.bpj.org/online/',
+            'https://www.bpj.org/poems/'
+        ],
+        'poem_patterns': [
+            r'^/online/.*$',
+            r'^/poems/.*$'
+        ],
+        'css_selectors': [
+            'a[href*="/poems/"]',
+            'a[href*="/online/"]'
+        ],
+        'exclude_patterns': [
+            r'/about', r'/submit', r'/subscribe'
+        ]
+    },
+    
+    'agnionline.bu.edu': {
+        'name': 'AGNI',
+        'base_urls': [
+            'https://agnionline.bu.edu/',
+            'https://agnionline.bu.edu/poetry/'
+        ],
+        'poem_patterns': [
+            r'^/poetry/.*$',
+            r'^/\d+/.*$'
+        ],
+        'css_selectors': [
+            'a[href*="/poetry/"]',
+            'article h2 a'
+        ],
+        'exclude_patterns': [
+            r'/about', r'/interviews', r'/fiction'
+        ]
+    },
+    
+    'ninthletter.com': {
+        'name': 'Ninth Letter',
+        'base_urls': [
+            'https://ninthletter.com/',
+            'https://ninthletter.com/category/poetry/'
+        ],
+        'poem_patterns': [
+            r'^/category/poetry/.*$',
+            r'^/\d{4}/.*$'
+        ],
+        'css_selectors': [
+            'a[href*="/poetry/"]',
+            'article h2 a'
+        ],
+        'exclude_patterns': [
+            r'/about', r'/staff', r'/submissions'
+        ]
+    },
+    
+    'antiochreview.org': {
+        'name': 'The Antioch Review',
+        'base_urls': [
+            'https://antiochreview.org/',
+            'https://antiochreview.org/poetry/'
+        ],
+        'poem_patterns': [
+            r'^/poetry/.*$',
+            r'^/current-issue/.*$'
+        ],
+        'css_selectors': [
+            'a[href*="/poetry/"]'
+        ],
+        'exclude_patterns': [
+            r'/about', r'/staff'
+        ]
+    },
+    
+    'theatlantic.com': {
+        'name': 'The Atlantic',
+        'base_urls': [
+            'https://www.theatlantic.com/category/poetry/',
+            'https://www.theatlantic.com/entertainment/poetry/'
+        ],
+        'poem_patterns': [
+            r'^/category/poetry/.*$',
+            r'^/entertainment/poetry/.*$'
+        ],
+        'css_selectors': [
+            'a[href*="/poetry/"]'
+        ],
+        'exclude_patterns': [
+            r'/about', r'/subscribe'
+        ]
+    },
+    
+    # TIER 3: UNIVERSITY & PRESTIGIOUS JOURNALS
     'iowareview.org': {
         'name': 'The Iowa Review',
         'base_urls': [
@@ -213,6 +476,44 @@ SITE_CONFIGS = {
         ]
     },
     
+    'coloradoreview.colostate.edu': {
+        'name': 'Colorado Review',
+        'base_urls': [
+            'https://coloradoreview.colostate.edu/',
+            'https://coloradoreview.colostate.edu/poetry/'
+        ],
+        'poem_patterns': [
+            r'^/poetry/.*$',
+            r'^/current-issue/.*$'
+        ],
+        'css_selectors': [
+            'a[href*="/poetry/"]',
+            'article a'
+        ],
+        'exclude_patterns': [
+            r'/about', r'/staff', r'/submissions'
+        ]
+    },
+    
+    'gulfcoastmag.org': {
+        'name': 'Gulf Coast',
+        'base_urls': [
+            'https://gulfcoastmag.org/',
+            'https://gulfcoastmag.org/online/'
+        ],
+        'poem_patterns': [
+            r'^/online/.*$',
+            r'^/poetry/.*$'
+        ],
+        'css_selectors': [
+            'a[href*="/online/"]',
+            'a[href*="/poetry/"]'
+        ],
+        'exclude_patterns': [
+            r'/about', r'/submit'
+        ]
+    },
+    
     'bwr.ua.edu': {
         'name': 'Black Warrior Review',
         'base_urls': [
@@ -233,7 +534,28 @@ SITE_CONFIGS = {
         ]
     },
     
-    # TIER 3: POETRY-FOCUSED JOURNALS
+    # TIER 4: POETRY-FOCUSED JOURNALS
+    'aprweb.org': {
+        'name': 'American Poetry Review',
+        'base_urls': [
+            'https://aprweb.org/',
+            'https://aprweb.org/category/poetry/'
+        ],
+        'poem_patterns': [
+            r'^/poetry/.*$',
+            r'^/poems/.*$',
+            r'^/\d{4}/.*$'
+        ],
+        'css_selectors': [
+            'a[href*="/poetry/"]',
+            'article a',
+            '.poem-link a'
+        ],
+        'exclude_patterns': [
+            r'/about', r'/submit', r'/staff'
+        ]
+    },
+    
     'plumepoetry.com': {
         'name': 'Plume',
         'base_urls': [
@@ -274,48 +596,244 @@ SITE_CONFIGS = {
         ]
     },
     
-    'aprweb.org': {
-        'name': 'American Poetry Review',
+    'poetlore.com': {
+        'name': 'Poet Lore',
         'base_urls': [
-            'https://aprweb.org/',
-            'https://aprweb.org/category/poetry/'
+            'https://www.poetlore.com/',
+            'https://www.poetlore.com/current-issue/'
         ],
         'poem_patterns': [
-            r'^/poetry/.*$',
-            r'^/poems/.*$',
-            r'^/\d{4}/.*$'
+            r'^/current-issue/.*$',
+            r'^/poetry/.*$'
         ],
         'css_selectors': [
             'a[href*="/poetry/"]',
-            'article a',
-            '.poem-link a'
+            'article a'
         ],
         'exclude_patterns': [
-            r'/about', r'/submit', r'/staff'
+            r'/about', r'/submit'
         ]
     },
     
-    'rattle.com': {
-        'name': 'Rattle Magazine',
+    '32poems.com': {
+        'name': '32 Poems',
         'base_urls': [
-            'https://rattle.com/poetry/',
-            'https://rattle.com/category/poetry/'
+            'https://www.32poems.com/',
+            'https://www.32poems.com/current/'
         ],
         'poem_patterns': [
-            r'^/poetry/.*$',
-            r'^/\d{4}/\d{2}/.*$'
+            r'^/current/.*$',
+            r'^/\d+\.\d+/.*$'
+        ],
+        'css_selectors': [
+            'a[href*="/current/"]',
+            'article a'
+        ],
+        'exclude_patterns': [
+            r'/about', r'/submit'
+        ]
+    },
+    
+    # TIER 5: CONTEMPORARY & DIGITAL-FIRST JOURNALS
+    'diodepoetry.com': {
+        'name': 'Diode Poetry Journal',
+        'base_urls': [
+            'https://diodepoetry.com/',
+            'https://diodepoetry.com/current-issue/'
+        ],
+        'poem_patterns': [
+            r'^/current-issue/.*$',
+            r'^/poetry/.*$'
         ],
         'css_selectors': [
             'a[href*="/poetry/"]',
-            'article a',
-            '.rattle-post a'
+            'article a'
         ],
         'exclude_patterns': [
-            r'/about', r'/submit', r'/subscribe', r'/category'
+            r'/about', r'/submit'
         ]
     },
     
-    # TIER 4: HIGH-QUALITY ONLINE SOURCES
+    'theadroitjournal.org': {
+        'name': 'The Adroit Journal',
+        'base_urls': [
+            'https://theadroitjournal.org/',
+            'https://theadroitjournal.org/category/poetry/'
+        ],
+        'poem_patterns': [
+            r'^/\d{4}/\d{2}/\d{2}/[^/]*poem[^/]*/$',
+            r'^/poetry/.*$'
+        ],
+        'css_selectors': [
+            'a[href*="/poetry/"]',
+            'article a'
+        ],
+        'exclude_patterns': [
+            r'/about', r'/submit', r'/category', r'/review', r'/interview', 
+            r'/essay', r'/critical-essays', r'/conversation', r'/profile',
+            r'/announcement', r'review-of', r'conversation-with'
+        ]
+    },
+    
+    'waxwingmag.org': {
+        'name': 'Waxwing',
+        'base_urls': [
+            'https://waxwingmag.org/',
+            'https://waxwingmag.org/poetry/'
+        ],
+        'poem_patterns': [
+            r'^/poetry/.*$',
+            r'^/issue/.*$'
+        ],
+        'css_selectors': [
+            'a[href*="/poetry/"]'
+        ],
+        'exclude_patterns': [
+            r'/about', r'/submit'
+        ]
+    },
+    
+    'thrushpoetryjournal.com': {
+        'name': 'Thrush Poetry Journal',
+        'base_urls': [
+            'https://www.thrushpoetryjournal.com/',
+            'https://www.thrushpoetryjournal.com/poetry/'
+        ],
+        'poem_patterns': [
+            r'^/poetry/.*$',
+            r'^/issue/.*$'
+        ],
+        'css_selectors': [
+            'a[href*="/poetry/"]'
+        ],
+        'exclude_patterns': [
+            r'/about', r'/submit'
+        ]
+    },
+    
+    'connotationpress.com': {
+        'name': 'Connotation Press',
+        'base_urls': [
+            'https://connotationpress.com/',
+            'https://connotationpress.com/poetry/'
+        ],
+        'poem_patterns': [
+            r'^/poetry/.*$'
+        ],
+        'css_selectors': [
+            'a[href*="/poetry/"]'
+        ],
+        'exclude_patterns': [
+            r'/about', r'/interviews'
+        ]
+    },
+    
+    'phoebejournal.com': {
+        'name': 'PHOEBE',
+        'base_urls': [
+            'https://www.phoebejournal.com/',
+            'https://www.phoebejournal.com/poetry/'
+        ],
+        'poem_patterns': [
+            r'^/poetry/.*$',
+            r'^/issue/.*$'
+        ],
+        'css_selectors': [
+            'a[href*="/poetry/"]',
+            'article a'
+        ],
+        'exclude_patterns': [
+            r'/about', r'/submit'
+        ]
+    },
+    
+    'comstockreview.org': {
+        'name': 'The Comstock Review',
+        'base_urls': [
+            'https://www.comstockreview.org/',
+            'https://www.comstockreview.org/poetry/'
+        ],
+        'poem_patterns': [
+            r'^/poetry/.*$',
+            r'^/current-issue/.*$'
+        ],
+        'css_selectors': [
+            'a[href*="/poetry/"]'
+        ],
+        'exclude_patterns': [
+            r'/about', r'/submit'
+        ]
+    },
+    
+    'cincinnatireviw.com': {
+        'name': 'The Cincinnati Review',
+        'base_urls': [
+            'https://www.cincinnatireviw.com/',
+            'https://www.cincinnatireviw.com/poetry/'
+        ],
+        'poem_patterns': [
+            r'^/poetry/.*$'
+        ],
+        'css_selectors': [
+            'a[href*="/poetry/"]'
+        ],
+        'exclude_patterns': [
+            r'/about', r'/staff'
+        ]
+    },
+    
+    'crazyhorsemag.com': {
+        'name': 'Crazy Horse',
+        'base_urls': [
+            'https://crazyhorsemag.com/',
+            'https://crazyhorsemag.com/poetry/'
+        ],
+        'poem_patterns': [
+            r'^/poetry/.*$'
+        ],
+        'css_selectors': [
+            'a[href*="/poetry/"]'
+        ],
+        'exclude_patterns': [
+            r'/about', r'/submit'
+        ]
+    },
+    
+    'storyquarterly.com': {
+        'name': 'Story Quarterly',
+        'base_urls': [
+            'https://www.storyquarterly.com/',
+            'https://www.storyquarterly.com/poetry/'
+        ],
+        'poem_patterns': [
+            r'^/poetry/.*$'
+        ],
+        'css_selectors': [
+            'a[href*="/poetry/"]'
+        ],
+        'exclude_patterns': [
+            r'/about', r'/submit'
+        ]
+    },
+    
+    'bluefifthreview.com': {
+        'name': 'Blue Fifth Review',
+        'base_urls': [
+            'https://www.bluefifthreview.com/',
+            'https://www.bluefifthreview.com/poetry/'
+        ],
+        'poem_patterns': [
+            r'^/poetry/.*$'
+        ],
+        'css_selectors': [
+            'a[href*="/poetry/"]'
+        ],
+        'exclude_patterns': [
+            r'/about', r'/submit'
+        ]
+    },
+    
+    # TIER 6: HIGH-QUALITY ONLINE SOURCES
     'skyislandjournal.com': {
         'name': 'Sky Island Journal',
         'base_urls': [
@@ -397,27 +915,6 @@ SITE_CONFIGS = {
         ]
     },
     
-    'theadroitjournal.org': {
-        'name': 'The Adroit Journal',
-        'base_urls': [
-            'https://theadroitjournal.org/',
-            'https://theadroitjournal.org/category/poetry/'
-        ],
-        'poem_patterns': [
-            r'^/\d{4}/\d{2}/\d{2}/[^/]*poem[^/]*/$',
-            r'^/poetry/.*$'
-        ],
-        'css_selectors': [
-            'a[href*="/poetry/"]',
-            'article a'
-        ],
-        'exclude_patterns': [
-            r'/about', r'/submit', r'/category', r'/review', r'/interview', 
-            r'/essay', r'/critical-essays', r'/conversation', r'/profile',
-            r'/announcement', r'review-of', r'conversation-with'
-        ]
-    },
-    
     # INTERNATIONAL SOURCES
     'granta.com': {
         'name': 'Granta',
@@ -458,26 +955,7 @@ SITE_CONFIGS = {
         ]
     },
     
-    'prismmagazine.ca': {
-        'name': 'PRISM International',
-        'base_urls': [
-            'https://prismmagazine.ca/',
-            'https://prismmagazine.ca/category/poetry/'
-        ],
-        'poem_patterns': [
-            r'^/poetry/.*$',
-            r'^/\d{4}/.*$'
-        ],
-        'css_selectors': [
-            'a[href*="/poetry/"]',
-            'article a'
-        ],
-        'exclude_patterns': [
-            r'/about', r'/submit', r'/subscribe'
-        ]
-    },
-    
-    # LEGACY SOURCES (your originals)
+    # LEGACY SOURCES (your originals - keeping them)
     'barrenmagazine.com': {
         'name': 'Barren Magazine',
         'base_urls': [
@@ -517,8 +995,6 @@ SITE_CONFIGS = {
             r'/about', r'/contests', r'/staff', r'/submissions'
         ]
     },
-    
-    # Add more configs for other sources as needed...
 }
 
 # REST OF YOUR EXISTING VALIDATION CODE (keeping it exactly as is)
@@ -856,7 +1332,7 @@ def get_poem_links(base_url: str, site_config: Dict) -> List[str]:
     print(f"✅ Discovered {len(unique_links)} potential poem links from {base_url}")
     return unique_links
 
-def discover_all_poem_links(domain: str, max_links: int = 50) -> List[str]:
+def discover_all_poem_links(domain: str, max_links: int = 200) -> List[str]:
     """
     Discover poem links from all configured URLs for a domain
     
@@ -943,13 +1419,13 @@ def filter_high_quality_poems(validation_results: Dict[str, ValidationResult],
 # TEST FUNCTION
 def test_mega_discovery():
     """Test the mega discovery system with multiple sources"""
-    print("🧪 Testing MEGA Poem Discovery System")
+    print("🧪 Testing MEGA Poem Discovery System with 75+ Sources")
     print("=" * 60)
     
-    # Test a few configured domains
-    test_domains = ['poems.com', 'poetryfoundation.org', 'versedaily.org']
+    # Test premium sources first
+    premium_sources = ['theparisreview.org', 'kenyonreview.org', 'poems.com']
     
-    for domain in test_domains:
+    for domain in premium_sources:
         print(f"\n🔍 Testing {domain}...")
         
         links = discover_all_poem_links(domain, max_links=5)
@@ -968,6 +1444,12 @@ def test_mega_discovery():
             print("❌ No links discovered")
         
         print("-" * 40)
+    
+    print(f"\n🎉 TOTAL CONFIGURED SOURCES: {len(SITE_CONFIGS)}")
+    print("Including legendary magazines like:")
+    legendary = ['The Paris Review', 'The Kenyon Review', 'Tin House', 'The Southern Review', 'Ploughshares']
+    for mag in legendary:
+        print(f"  ✨ {mag}")
 
 if __name__ == "__main__":
     # Run the test
