@@ -1,8 +1,10 @@
 {
   "posted_urls": [
+    "https://www.threepennyreview.com/samples/cunniff_su20.html",
     "https://iowareview.org/blog/victorious-alice-notley-1945%E2%80%932025",
-    "https://plumepoetry.com/last-day-on-earth-in-the-eternal-city-by-angie-estes-reviewed-by-jane-zwart/",
-    "https://prismmagazine.ca/2018/11/07/call-for-themed-submissions-ruin/"
+    "https://www.32poems.com/issues/no-44-winter-2025/",
+    "https://prismmagazine.ca/2018/11/07/call-for-themed-submissions-ruin/",
+    "https://plumepoetry.com/last-day-on-earth-in-the-eternal-city-by-angie-estes-reviewed-by-jane-zwart/"
   ],
   "poems": [
     {
@@ -25,6 +27,20 @@
       "author": "Zwart Jane",
       "source": "Plume",
       "posted_at": "2025-06-26T14:42:55.436041"
+    },
+    {
+      "url": "https://www.32poems.com/issues/no-44-winter-2025/",
+      "title": "No. 44 Winter 2025",
+      "author": "Unknown",
+      "source": "32 Poems",
+      "posted_at": "2025-06-27T16:33:11.806474"
+    },
+    {
+      "url": "https://www.threepennyreview.com/samples/cunniff_su20.html",
+      "title": "Blog",
+      "author": "Unknown",
+      "source": "The Threepenny Review",
+      "posted_at": "2025-06-27T16:44:22.537317"
     }
   ]
 }
