@@ -12,8 +12,97 @@ from bs4 import BeautifulSoup
 class PunchyTwitterPoetryBot(TwitterPoetryBot):
     """Twitter bot that finds the punchiest 4 consecutive lines"""
     
+    def is_actually_a_poem(self, text, title=""):
+        """Validate that extracted content is actually a poem, not prose/essay"""
+        if not text or len(text.strip()) < 20:
+            return False, "Content too short"
+        
+        lines = [line.strip() for line in text.split('\n') if line.strip()]
+        
+        if len(lines) < 3:
+            return False, "Too few lines for a poem"
+        
+        # Calculate line statistics
+        line_lengths = [len(line) for line in lines]
+        avg_line_length = sum(line_lengths) / len(line_lengths)
+        max_line_length = max(line_lengths)
+        
+        # Check for prose indicators (very long lines)
+        very_long_lines = sum(1 for length in line_lengths if length > 120)
+        if very_long_lines > len(lines) * 0.4:
+            return False, "Too many long lines - likely prose"
+        
+        # Check average line length (poems usually shorter)
+        if avg_line_length > 80:
+            return False, f"Average line too long ({avg_line_length}) - likely prose"
+        
+        # Check for essay/review patterns
+        text_lower = text.lower()
+        title_lower = title.lower()
+        
+        # Strong essay/review indicators
+        essay_patterns = [
+            'in this essay', 'the author argues', 'according to', 'furthermore',
+            'in conclusion', 'to summarize', 'for example', 'such as',
+            'the collection', 'the poet writes', 'as mentioned earlier',
+            'this book', 'this volume', 'the work', 'the reader',
+            'published by', 'press', 'university', 'copyright',
+            'review', 'analysis', 'critique', 'examination',
+            'drawing on', 'building upon', 'in contrast', 'similarly'
+        ]
+        
+        essay_count = sum(1 for pattern in essay_patterns if pattern in text_lower)
+        if essay_count >= 3:
+            return False, f"Contains essay patterns ({essay_count} found)"
+        
+        # Check for list/navigation patterns
+        list_patterns = ['home', 'about', 'contact', 'subscribe', 'archive', 'browse']
+        list_count = sum(1 for pattern in list_patterns if pattern in text_lower)
+        if list_count >= 3:
+            return False, "Contains navigation/list content"
+        
+        # Check for poetic indicators (positive signs)
+        poetic_indicators = [
+            'metaphor', 'imagery', 'stanza', 'verse', 'rhythm',
+            'like', 'as if', 'becomes', 'transforms', 'whispers',
+            'shadows', 'dreams', 'memory', 'heart', 'soul'
+        ]
+        
+        poetic_count = sum(1 for indicator in poetic_indicators if indicator in text_lower)
+        
+        # Check line structure - poems have intentional line breaks
+        short_lines = sum(1 for length in line_lengths if length < 60)
+        line_variety = max(line_lengths) - min(line_lengths)
+        
+        # Poems typically have more short lines and varied structure
+        if short_lines < len(lines) * 0.3 and line_variety < 20:
+            return False, "Lacks poetic line structure"
+        
+        # Check for excessive repetition (might be navigation)
+        unique_lines = set(lines)
+        if len(unique_lines) < len(lines) * 0.7:
+            return False, "Too much repetition - likely navigation"
+        
+        # Final validation: looks like a poem
+        poem_score = 0
+        
+        # Positive indicators
+        poem_score += poetic_count * 2
+        poem_score += short_lines  # Short lines are good
+        poem_score += min(line_variety // 10, 5)  # Line variety is good
+        
+        # Negative indicators
+        poem_score -= essay_count * 3
+        poem_score -= list_count * 2
+        poem_score -= very_long_lines * 2
+        
+        if poem_score < 0:
+            return False, f"Poem score too low ({poem_score})"
+        
+        return True, "Content validated as poem"
+    
     def extract_poem_from_url(self, url, source_name="Unknown"):
-        """Enhanced extraction with better author detection"""
+        """Enhanced extraction with poem validation"""
         if url in self.failed_urls:
             return None
             
@@ -48,6 +137,13 @@ class PunchyTwitterPoetryBot(TwitterPoetryBot):
             poem_text = self.extract_clean_poem_text(soup)
             
             if poem_text and len(poem_text) > 50:
+                # VALIDATE IT'S ACTUALLY A POEM
+                is_poem, poem_message = self.is_actually_a_poem(poem_text, title)
+                if not is_poem:
+                    print(f"❌ Not a poem: {poem_message} - {url}")
+                    self.failed_urls.add(url)
+                    return None
+                
                 poem_data = {
                     'title': title,
                     'author': author,
@@ -56,10 +152,13 @@ class PunchyTwitterPoetryBot(TwitterPoetryBot):
                     'url': url
                 }
                 
+                # Original validation (keep this too)
                 is_valid, message = self.validate_poem_content(poem_data, url)
                 if is_valid:
+                    print(f"✅ Poem validated: {title} by {author}")
                     return poem_data
                 else:
+                    print(f"❌ Validation failed: {message} - {url}")
                     self.failed_urls.add(url)
                     return None
             else:
@@ -116,16 +215,17 @@ class PunchyTwitterPoetryBot(TwitterPoetryBot):
         return title if title else "Untitled"
     
     def extract_better_author(self, soup, url):
-        """Enhanced author extraction with multiple strategies"""
+        """Enhanced author extraction with duplicate prevention"""
         author = "Unknown"
         
         # Strategy 1: Look for common author selectors
         author_selectors = [
             '.daily_poem_author', '.c-feature-sub', '.author', '.poet', 
             '.byline', '.poem-author', 'span.author', 'p.author',
-            '.entry-author', '.post-author', 'h3', 'h4'
+            '.entry-author', '.post-author'
         ]
         
+        # Try each selector once and take the first valid result
         for selector in author_selectors:
             author_elem = soup.select_one(selector)
             if author_elem:
@@ -137,11 +237,13 @@ class PunchyTwitterPoetryBot(TwitterPoetryBot):
                 candidate = re.sub(r'\(\d{4}[-–]?\d{0,4}\)', '', candidate)
                 candidate = re.sub(r'\s+', ' ', candidate).strip()
                 
-                if candidate and len(candidate) > 2 and candidate not in ['Instagram', 'Facebook', 'Twitter', 'Home', 'About']:
+                # Validate candidate
+                if (candidate and len(candidate) > 2 and len(candidate) < 50 and
+                    candidate not in ['Instagram', 'Facebook', 'Twitter', 'Home', 'About', 'Poetry', 'Poems']):
                     author = candidate
                     break
         
-        # Strategy 2: Look in page title for "by Author"
+        # Strategy 2: Look in page title for "by Author" (only if still unknown)
         if author == "Unknown":
             page_title = soup.find('title')
             if page_title:
@@ -149,22 +251,27 @@ class PunchyTwitterPoetryBot(TwitterPoetryBot):
                 by_match = re.search(r'\bby\s+([^|–-]+)', title_text, re.IGNORECASE)
                 if by_match:
                     candidate = by_match.group(1).strip()
-                    if len(candidate) > 2:
+                    if len(candidate) > 2 and len(candidate) < 50:
                         author = candidate
         
-        # Strategy 3: Look for author links
+        # Strategy 3: Look for specific heading patterns (h3, h4 that might be authors)
         if author == "Unknown":
-            author_links = soup.find_all('a', href=re.compile(r'/(author|poet|writer)/', re.IGNORECASE))
-            for link in author_links:
-                candidate = link.get_text().strip()
-                if candidate and len(candidate) > 2:
-                    author = candidate
-                    break
+            for heading in ['h3', 'h4']:
+                heading_elem = soup.select_one(heading)
+                if heading_elem:
+                    candidate = heading_elem.get_text().strip()
+                    # Check if it looks like an author name (2-3 words, proper case)
+                    words = candidate.split()
+                    if (len(words) >= 2 and len(words) <= 3 and 
+                        all(word[0].isupper() for word in words if word) and
+                        len(candidate) < 50):
+                        author = candidate
+                        break
         
         return author
     
     def extract_clean_poem_text(self, soup):
-        """Extract clean poem text"""
+        """Extract clean poem text with aggressive metadata filtering"""
         poem_selectors = [
             '.elementor-widget-theme-post-content', '.c-feature-bd',
             '.poem', '.poetry', '.poem-text', '.entry-content', 
@@ -184,27 +291,36 @@ class PunchyTwitterPoetryBot(TwitterPoetryBot):
         poem_text = poem_content.get_text(separator='\n').strip()
         lines = [line.strip() for line in poem_text.split('\n') if line.strip()]
         
-        # Aggressive filtering
+        # AGGRESSIVE filtering for metadata
         clean_lines = []
         exclude_patterns = [
             'subscribe', 'newsletter', 'posted on', 'published', 'updated',
             'read more', 'www.', 'http', '.com', 'copyright', 'share this',
-            'about', 'contact', 'menu', 'navigation'
+            'about', 'contact', 'menu', 'navigation', 'productions', 'film',
+            'magazine', 'press', 'review', 'book', 'collection', 'university'
         ]
         
         for line in lines:
             line_lower = line.lower()
             
-            # Skip dates
+            # Skip dates and years (like "1936")
+            if re.search(r'\d{4}', line):
+                continue
             if re.search(r'\d{1,2}/\d{1,2}/\d{4}', line):
                 continue
             if re.search(r'\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4}\b', line):
                 continue
             
+            # Skip lines that repeat the title or author
+            title_words = self.extract_better_title(soup, "").lower().split()
+            if any(word in line_lower for word in title_words if len(word) > 3):
+                continue
+            
             # Skip unwanted content
             if (any(pattern in line_lower for pattern in exclude_patterns) or
                 len(line.strip()) <= 3 or
-                '//' in line):
+                '//' in line or
+                line.count(',') > 3):  # Likely metadata if many commas
                 continue
                 
             clean_lines.append(line)
@@ -280,45 +396,53 @@ class PunchyTwitterPoetryBot(TwitterPoetryBot):
         return score
     
     def post_poem(self, poem):
-        """Create clean, punchy tweet format"""
+        """Create clean, punchy tweet format with link"""
         if not poem:
             return False
         
         # Get the punchiest 4 lines
         punchy_lines = self.find_punchiest_4_lines(poem['text'])
         
-        # Simple, clean format: Title — Author Name
-        header = f"{poem['title']} — {poem['author']}"
+        # Ensure we have at least 2 lines
+        if len(punchy_lines) < 2:
+            print("❌ Not enough clean lines found")
+            return False
         
-        # Join the 4 lines
-        poem_excerpt = '\n'.join(punchy_lines)
+        # Simple format: Title — Author Name
+        title = poem['title'][:40] + '...' if len(poem['title']) > 40 else poem['title']
+        header = f"{title} — {poem['author']}"
         
-        # Create tweet
-        tweet_text = f"{header}\n{poem_excerpt}\n\n#Poetry"
+        # Join the lines (aim for 4, but at least 2)
+        poem_excerpt = '\n'.join(punchy_lines[:4])
         
-        # If too long, try shorter title
+        # Create tweet with link
+        tweet_text = f"{header}\n{poem_excerpt}\n\n{poem['url']}\n\n#Poetry"
+        
+        # If too long, try without link first
         if len(tweet_text) > 280:
-            # Try just first word of title if it's long
-            words = poem['title'].split()
-            if len(words) > 3:
-                short_title = ' '.join(words[:2]) + '...'
-                header = f"{short_title} — {poem['author']}"
-                tweet_text = f"{header}\n{poem_excerpt}\n\n#Poetry"
+            tweet_text = f"{header}\n{poem_excerpt}\n\n#Poetry"
         
-        # If still too long, take only 3 lines
-        if len(tweet_text) > 280:
+        # If still too long, use only 3 lines
+        if len(tweet_text) > 280 and len(punchy_lines) >= 3:
             poem_excerpt = '\n'.join(punchy_lines[:3])
             tweet_text = f"{header}\n{poem_excerpt}\n\n#Poetry"
         
-        # Final fallback
+        # If still too long, use only 2 lines
         if len(tweet_text) > 280:
-            tweet_text = f"{poem['title']} — {poem['author']}\n\n{punchy_lines[0]}\n{punchy_lines[1]}\n\n#Poetry"
+            poem_excerpt = '\n'.join(punchy_lines[:2])
+            tweet_text = f"{header}\n{poem_excerpt}\n\n#Poetry"
+        
+        # Final fallback - shorten title
+        if len(tweet_text) > 280:
+            short_title = title.split()[0] if title else "Poem"
+            header = f"{short_title} — {poem['author']}"
+            tweet_text = f"{header}\n{poem_excerpt}\n\n#Poetry"
         
         print(f"📱 PUNCHY TWEET ({len(tweet_text)} chars):")
         print("=" * 60)
         print(tweet_text)
         print("=" * 60)
-        print(f"🎯 Selected lines {punchy_lines}")
+        print(f"🎯 Selected {len(punchy_lines)} lines: {[line[:30] + '...' if len(line) > 30 else line for line in punchy_lines[:4]]}")
         
         # Twitter API code (same as before)
         try:
