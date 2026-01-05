@@ -1,21 +1,16 @@
-# Twitter API
-tweepy==4.14.0
-
-# Image processing
-Pillow==10.1.0
-
-# Web scraping
+# Core Dependencies
 requests==2.31.0
 beautifulsoup4==4.12.2
 lxml==4.9.3
 
-# AI APIs
-openai==1.82.0
-google-generativeai==0.8.5
-anthropic==0.52.0
+# Twitter API
+tweepy==4.14.0
 
 # Environment management
 python-dotenv==1.0.0
 
-# Additional utilities
+# Scheduling
 schedule==1.2.0
+
+# Optional: Image processing (for future use)
+# Pillow==10.1.0

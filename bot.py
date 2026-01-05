@@ -5,10 +5,18 @@ Main Poetry Bot - Clean, reliable, quality-focused.
 
 import os
 from typing import Optional
+from pathlib import Path
 from sources import PoetryDailySource, Poem
 from validators import ContentValidator
 from formatters import TwitterFormatter
 from storage import PostedTracker
+
+
+def ensure_directories():
+    """Create necessary directories if they don't exist"""
+    Path('data').mkdir(exist_ok=True)
+    Path('logs').mkdir(exist_ok=True)
+    Path('docs').mkdir(exist_ok=True)
 
 
 class PoetryBot:
@@ -21,6 +29,9 @@ class PoetryBot:
         Args:
             preview_mode: If True, don't post to Twitter (just preview)
         """
+        # Ensure directories exist
+        ensure_directories()
+
         self.preview_mode = preview_mode
         self.validator = ContentValidator()
         self.formatter = TwitterFormatter()
@@ -108,6 +119,13 @@ class PoetryBot:
         """
         try:
             import tweepy
+
+            # Load environment variables from .env if present
+            try:
+                from dotenv import load_dotenv
+                load_dotenv()
+            except ImportError:
+                pass  # python-dotenv not installed, use system env vars
 
             # Get credentials
             api_key = os.getenv('TWITTER_API_KEY')

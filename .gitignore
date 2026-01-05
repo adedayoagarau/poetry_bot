@@ -1,51 +1,49 @@
+# Environment variables
+.env
+
 # Python
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
-env/
-venv/
-poetry_env/
-.env
-.env.local
-.env.*.local
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Data and logs
+data/
+logs/
+*.log
 
 # IDE
 .vscode/
 .idea/
 *.swp
 *.swo
+*~
 
 # OS
 .DS_Store
 Thumbs.db
 
-# Project specific
-*.png
-*.jpg
-*.jpeg
-poetry_log.json
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
 
-# Never commit credentials or sensitive files
-credentials.json
-secrets.json
-api_keys.txt
-*.key
-*.pem
-*.p12
-*.pfx
-session_*.json
-
-# Logs
-*.log
-logs/
-
-# Temporary files
-*.tmp
-*.temp
-
-# Task Master files (if using)
-.taskmasterconfig
-tasks/
-scripts/node_modules/
+# Node (from old code)
+node_modules/
+package-lock.json
