@@ -1,0 +1,43 @@
+# Poetry Bot Configuration
+
+# Bot Settings
+bot:
+  preview_mode: true  # Set to false for live posting
+  posts_per_day: 1    # Start conservative
+  post_times_utc:
+    - "14:00"  # 9am EST (peak engagement)
+
+# Sources (in priority order)
+sources:
+  - name: "Poetry Daily"
+    enabled: true
+    weight: 1.0
+
+  # Future sources (disabled for now)
+  - name: "Poetry Foundation"
+    enabled: false
+    weight: 1.0
+
+  - name: "Academy of American Poets"
+    enabled: false
+    weight: 1.0
+
+# Validation Settings
+validation:
+  min_word_count: 20
+  max_word_count: 600
+  min_line_count: 4
+  max_line_count: 100
+  max_avg_line_length: 120
+
+# Twitter Settings
+twitter:
+  max_tweet_length: 280
+  default_lines_in_excerpt: 4
+  hashtags:
+    - "Poetry"
+
+# Storage
+storage:
+  posted_poems_file: "data/posted_poems.json"
+  max_history: 500
